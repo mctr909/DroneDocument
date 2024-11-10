@@ -1,0 +1,18 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "chrome",
+			"request": "launch",
+			"name": "Launch WebGL",
+			"url": "${workspaceFolder}/WebGL.htm",
+			"webRoot": "${workspaceFolder}"
+		},{
+			"type": "chrome",
+			"request": "launch",
+			"name": "Launch Create Axis",
+			"url": "${workspaceFolder}/axis.htm",
+			"webRoot": "${workspaceFolder}"
+		}
+	]
+}
