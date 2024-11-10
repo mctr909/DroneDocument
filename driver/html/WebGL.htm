@@ -1,0 +1,59 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//JP">
+<html lang="ja">
+<meta charset="utf-8">
+<html>
+	<head>
+		<title>WebGL TEST</title>
+		<script type="text/javascript" src="common/math.js"></script>
+		<script type="text/javascript" src="common/model.js"></script>
+		<script type="text/javascript" src="common/render.js"></script>
+		<script type="text/javascript" src="common/drawer.js"></script>
+		<script type="text/javascript" src="common/viewpad.js"></script>
+		<script type="text/javascript" src="WebGL.js"></script>
+		<script type="text" id="vs">
+			attribute vec3 vertex;
+			uniform   mat4 mvpMatrix;
+			uniform   mat4 mMatrix;
+			varying   vec3 vVertex;
+
+			void main(void){
+				vVertex = (mMatrix * vec4(vertex, 1.0)).xyz;
+				gl_Position = mvpMatrix * vec4(vertex, 1.0);
+			}
+		</script>
+		<script type="text" id="fs">
+			#extension GL_OES_standard_derivatives : enable
+			precision mediump float;
+
+			uniform mat4 invMatrix;
+			uniform vec4 color;
+			uniform vec3 lightPosition;
+			uniform vec3 eyeDirection;
+			uniform vec4 ambientColor;
+			varying vec3 vVertex;
+
+			void main(void){
+				vec3 lightVec = lightPosition - vVertex;
+				vec3 invLight = normalize(invMatrix * vec4(lightVec, 0.0)).xyz;
+				vec3 invEye	= normalize(invMatrix * vec4(eyeDirection, 0.0)).xyz;
+				vec3 halfLE	= normalize(invLight + invEye);
+				vec3 dx = dFdx(vVertex);
+				vec3 dy = dFdy(vVertex);
+				vec3 normal = normalize(cross(normalize(dx), normalize(dy)));
+				float diffuse   = clamp(dot(normal, invLight), 0.0, 1.0)*0.8 + 0.2;
+				float specular  = pow(clamp(dot(normal, halfLE), 0.0, 1.0), 50.0);
+				vec4  destColor = color * vec4(vec3(diffuse), 1.0) + vec4(vec3(specular), 1.0) + ambientColor;
+				gl_FragColor	= destColor;
+			}
+		</script>
+	</head>
+	<body>
+		<input type="file" id="file1" multiple/><br/>
+		<table>
+			<tr>
+				<td><canvas id="canvas"></canvas></td>
+				<td><input id="scale" type="range" value="50" min=1 max=300 style="width:256px;"><br><canvas id="viewpad"></canvas></td>
+			</tr>
+		</table>
+	</body>
+</html>

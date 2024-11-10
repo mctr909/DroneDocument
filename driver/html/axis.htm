@@ -1,0 +1,300 @@
+<body>
+	<a href="#" id="download">objファイル保存</a>
+</body>
+<script type="text/javascript">
+class vec3 {
+	/** @type {number} */
+	x;
+	/** @type {number} */
+	y;
+	/** @type {number} */
+	z;
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 * @param {number} z
+	 */
+	constructor(x, y, z=0) {
+		this.x = x;
+		this.y = y;
+		this.z = z;
+	}
+}
+
+class qtn {
+	/** @type {number} */
+	#w;
+	/** @type {number} */
+	#x;
+	/** @type {number} */
+	#y;
+	/** @type {number} */
+	#z;
+	/**
+	 * @param {vec3} axiz
+	 * @param {number} theta
+	 */
+	setParam(axiz, theta) {
+		let s = Math.sin(theta/2);
+		this.#w = Math.cos(theta/2);
+		this.#x = axiz.x * s;
+		this.#y = axiz.y * s;
+		this.#z = axiz.z * s;
+	}
+	/**
+	 * @param {vec3} returnValue
+	 * @param {vec3} input
+	 */
+	mulVec(returnValue, input) {
+		let ww = this.#w*this.#w;
+		let xx = this.#x*this.#x;
+		let yy = this.#y*this.#y;
+		let zz = this.#z*this.#z;
+		let wx = 2*this.#w*this.#x;
+		let wy = 2*this.#w*this.#y;
+		let wz = 2*this.#w*this.#z;
+		let xy = 2*this.#x*this.#y;
+		let xz = 2*this.#x*this.#z;
+		let yz = 2*this.#y*this.#z;
+		let x = input.x;
+		let y = input.y;
+		let z = input.z;
+		returnValue.x = (ww+xx-yy-zz)*x +     (xy - wz)*y +     (xz + wy)*z;
+		returnValue.y =     (xy + wz)*x + (ww-xx+yy-zz)*y +     (yz - wx)*z;
+		returnValue.z =     (xz - wy)*x +     (yz + wx)*y + (ww-xx-yy+zz)*z;
+	}
+	/**
+	 * @param {qtn} a
+	 * @param {qtn} b
+	 */
+	static mul(returnValue, a, b) {
+		let aw = a.#w;
+		let ax = a.#x;
+		let ay = a.#y;
+		let az = a.#z;
+		let bw = b.#w;
+		let bx = b.#x;
+		let by = b.#y;
+		let bz = b.#z;
+		returnValue.#w = aw*bw - ax*bx - ay*by - az*bz;
+		returnValue.#x = ax*bw + aw*bx - az*by + ay*bz;
+		returnValue.#y = ay*bw + az*bx + aw*by - ax*bz;
+		returnValue.#z = az*bw - ay*bx + ax*by + aw*bz;
+	}
+}
+
+/**
+ * @param {number} v
+ * @param {number} digit
+ */
+function round(v, digit=4) {
+	let unit = Math.pow(10, digit - 1);
+	let sign = Math.sign(v);
+	let f = v * unit * sign;
+	let i = parseInt(f + 0.5);
+	return i / unit * sign;
+}
+
+/**
+ * @param {number[]} cols
+ */
+function toTriangle(cols) {
+	const N = cols.length - 1;
+	const NH = N >>> 1;
+	/** @type {number[][]} */
+	let faces = [];
+	for (let i = 1; i < NH; i++) {
+		let bl = cols[i];
+		let br = cols[i + 1];
+		let tr = cols[N - i];
+		let tl = cols[N - i + 1];
+		faces.push([tl, bl, br]);
+		faces.push([br, tr, tl]);
+	}
+	if (N%2 != 0) {
+		let br = cols[NH];
+		let tr = cols[NH+1];
+		let tl = cols[NH+2];
+		faces.push([br, tr, tl]);
+	}
+	return faces;
+}
+
+/**
+ * @param {number} radius
+ * @param {number} thick
+ * @param {number} arrowW
+ * @param {number} arrowL
+ */
+function createArrow(radius, thick, arrowW, arrowL) {
+	const inner = radius-thick;
+	const outer = radius+thick;
+	/** @type {vec3[]} */
+	let vert = [];
+	vert.push(new vec3(0,radius));
+	let begin = Math.atan2(inner, arrowL);
+	vert.push(new vec3(
+		inner*Math.cos(begin),
+		inner*Math.sin(begin)-arrowW
+	));
+	let theta = begin;
+	for (; theta>=0; theta-=Math.PI/48) {
+		vert.push(new vec3(
+			inner*Math.cos(theta),
+			inner*Math.sin(theta)
+		));
+	}
+	if (theta != 0) {
+		vert.push(new vec3(inner, 0));
+	}
+	begin = Math.atan2(outer, arrowL);
+	for (theta = 0; theta<=begin; theta+=Math.PI/48) {
+		vert.push(new vec3(
+			outer*Math.cos(theta),
+			outer*Math.sin(theta)
+		));
+	}
+	if (theta != begin) {
+		vert.push(new vec3(
+			outer*Math.cos(begin),
+			outer*Math.sin(begin)
+		));
+	}
+	vert.push(new vec3(
+		outer*Math.cos(begin),
+		outer*Math.sin(begin)+arrowW
+	));
+	return vert;
+}
+
+function createFile(str) {
+	let blob = new Blob([ str ], { "type" : "text/plain" });
+	if (window.navigator.msSaveBlob) {
+		window.navigator.msSaveBlob(blob, "test.obj");
+		window.navigator.msSaveOrOpenBlob(blob, "test.obj");
+	} else {
+		document.getElementById("download").href = window.URL.createObjectURL(blob);
+		document.getElementById("download").download = "test.obj";
+	}
+}
+
+{
+	let qy = new qtn();
+	let qx = new qtn();
+	let qt = new qtn();
+	qy.setParam(new vec3(0,1,0), -Math.PI/2);
+	qt.setParam(new vec3(1,0,0), -Math.PI/2);
+	qtn.mul(qy, qy, qt);
+	qx.setParam(new vec3(1,0,0), Math.PI/2);
+	qt.setParam(new vec3(0,1,0), Math.PI/2);
+	qtn.mul(qx, qx, qt);
+
+	let vert = [];
+
+	const axisRadius = 0.05;
+	const axisLength = 5;
+	const axisDiv = 12;
+	let vAxis = [];
+	for (let i=0; i<=axisDiv; i++) {
+		let th = 2*Math.PI*i/axisDiv;
+		vAxis.push(new vec3(
+			axisRadius*Math.cos(th),
+			axisRadius*Math.sin(th)
+		));
+	}
+	for (let i=axisDiv; i>=0; i--) {
+		let th = 2*Math.PI*i/axisDiv;
+		vAxis.push(new vec3(
+			axisRadius*Math.cos(th),
+			axisRadius*Math.sin(th),
+			axisLength
+		));
+	}
+	for (let i=0; i<vAxis.length; i++) {
+		vert.push(vAxis[i]);
+	}
+	for (let i=0; i<vAxis.length; i++) {
+		let v = new vec3();
+		qy.mulVec(v, vAxis[i]);
+		vert.push(v);
+	}
+	for (let i=0; i<vAxis.length; i++) {
+		let v = new vec3();
+		qx.mulVec(v, vAxis[i]);
+		vert.push(v);
+	}
+
+	let vArrow = createArrow(axisLength * 3/4, 0.1, 0.2, 0.5);
+	for (let i=0; i<vArrow.length; i++) {
+		vert.push(vArrow[i]);
+	}
+	for (let i=0; i<vArrow.length; i++) {
+		let v = new vec3();
+		qy.mulVec(v, vArrow[i]);
+		vert.push(v);
+	}
+	for (let i=0; i<vArrow.length; i++) {
+		let v = new vec3();
+		qx.mulVec(v, vArrow[i]);
+		vert.push(v);
+	}
+
+	let str = "mtllib color.mtl\r\n";
+	for (let i=0; i<vert.length; i++) {
+		let v = vert[i];
+		str += "v " + round(v.x) + " " + round(v.y) + " " + round(v.z) + "\r\n";
+	}
+
+	let indexAz = [0];
+	let indexAy = [0];
+	let indexAx = [0];
+	for (let iZ=0,iY=iZ+vAxis.length,iX=iY+vAxis.length; iZ<vAxis.length; iZ++,iY++,iX++) {
+		indexAz.push(iZ+1);
+		indexAy.push(iY+1);
+		indexAx.push(iX+1);
+	}
+	let faces = [
+		toTriangle(indexAz),
+		toTriangle(indexAy),
+		toTriangle(indexAx)
+	];
+	for (let j=0; j<faces.length; j++) {
+		str += "usemtl axis" + (j+1) + "\r\n";
+		str += "g axis" + (j+1) + "\r\n";
+		let face = faces[j];
+		for (let i=0; i<face.length; i++) {
+			let f = face[i];
+			str += "f " + f[0] + " " + f[1] + " " + f[2] + "\r\n";
+		}
+	}
+
+	let indexZ = [0];
+	let indexY = [0];
+	let indexX = [0];
+	for (let i=0,iZ=(vAxis.length)*3,iY=iZ+vArrow.length,iX=iY+vArrow.length; i<vArrow.length; i++,iZ++,iY++,iX++) {
+		indexZ.push(iZ+1);
+		indexY.push(iY+1);
+		indexX.push(iX+1);
+	}
+	faces = [
+		toTriangle(indexZ),
+		toTriangle(indexY),
+		toTriangle(indexX)
+	];
+	for (let j=0; j<faces.length; j++) {
+		str += "usemtl arrow" + (j+1) + "\r\n";
+		str += "g arrow" + (j+1) + "\r\n";
+		let face = faces[j];
+		for (let i=0; i<face.length; i++) {
+			let f = face[i];
+			str += "f " + f[0] + " " + f[1] + " " + f[2] + "\r\n";
+		}
+		for (let i=0; i<face.length; i++) {
+			let f = face[i];
+			str += "f " + f[2] + " " + f[1] + " " + f[0] + "\r\n";
+		}
+	}
+
+	createFile(str);
+}
+</script>
