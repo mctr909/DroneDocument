@@ -1,19 +1,13 @@
 ﻿namespace Cl;
 
-public class ClBlade(in int[] bases, int sign = 1) {
+public class ClBases(in int[] bases, int sign = 1) {
 	public int Sign { get; set; } = sign;
 
 	public int[] Bases { get; } = [.. bases];
 
-	public string Id => string.Join(",", Bases);
+	public readonly string Id = string.Join("", bases.Select(i => $"e_{i}"));
 
-	public override string ToString() {
-		var s = Bases.Length == 0 ? "1" : "";
-		var m = string.Join("", Bases.Select(i => "e" + i));
-		return s + m;
-	}
-
-	public static ClBlade Canonicalize(in int[] bases, in int[] metric) {
+	public static ClBases Canonicalize(in int[] bases, in int[] metric) {
 		List<int> list = [.. bases];
 		int sign = 1;
 		var changed = true;
@@ -36,6 +30,6 @@ public class ClBlade(in int[] bases, int sign = 1) {
 				}
 			}
 		}
-		return new ClBlade([.. list], sign);
+		return new ClBases([.. list], sign);
 	}
 }
