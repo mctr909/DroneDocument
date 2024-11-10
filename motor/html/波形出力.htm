@@ -1,0 +1,89 @@
+<META http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+th {
+	background-color: #DFFFDF;
+}
+.color_u {
+	background-color: #FFBFBF;
+}
+.color_v {
+	background-color: #BFBFFF;
+}
+.color_w {
+	background-color: #BFFFBF;
+}
+.color_z {
+	background-color: #FFFFBF;
+}
+.index {
+	font-size: 11pt;
+	text-align: right;
+}
+</style>
+<body>
+	<table>
+		<tr>
+			<td>0相振幅</td>
+			<td><input type="range" id="rangeZ" min=0 max=22 value=14 style="width:500px;" /></td>
+			<td><output id="dispZ"></output></td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>振幅</td>
+			<td><input type="range" id="rangeAmp" min=0 max=63 value=63 style="width:500px;" /></td>
+			<td><output id="dispAmp"></output></td>
+			<td><input type="checkbox" id="chkNormalize" />正規化</td>
+		</tr>
+		<tr>
+			<td>ステップ数</td>
+			<td><select onchange="stepCount_onchange(this);">
+				<option>12</option>
+				<option selected>24</option>
+				<option>36</option>
+				<option>48</option>
+			</select></td>
+			<td></td>
+			<td></td>
+		</tr>
+	</table>
+	<table border="1" style="border-collapse:collapse;">
+		<tr><th>波形表示</th></tr>
+		<tr><td>
+			<table style="border-collapse:collapse;">
+				<tr>
+					<td class="color_u"><input type="checkbox" id="chkU" checked />U相</td>
+					<td class="color_v"><input type="checkbox" id="chkV" checked />V相</td>
+					<td class="color_w"><input type="checkbox" id="chkW" />W相</td>
+					<td class="color_z"><input type="checkbox" id="chkZ" />0相</td>
+				</tr>
+				<tr>
+					<td class="color_u"><input type="checkbox" id="chkUV" checked />U相-V相</td>
+					<td class="color_v"><input type="checkbox" id="chkVW" />V相-W相</td>
+					<td class="color_w"><input type="checkbox" id="chkWU" />W相-U相</td>
+					<td class="color_z"></td>
+				</tr>
+			</table>
+			<canvas id="graph"></canvas>
+		</td></tr>
+		<tr><th>振幅スペクトラム</th></tr>
+		<tr><td>
+			<table style="border-collapse:collapse;">
+				<tr>
+					<td><input type="checkbox" id="chkSpec" checked />指定振幅</td>
+					<td class="color_w"><input type="checkbox" id="chkAvg" />平均</td>
+					<td class="color_u"><input type="checkbox" id="chkMax" />最大</td>
+				</tr>
+			</table>
+		</td></tr>
+		<tr><td><canvas id="spec"></canvas></td></tr>
+	</table>
+	<table>
+		<tr>
+			<td style="vertical-align:top;"><span id="valueTable"></span></td>
+			<td style="vertical-align:top;"><span id="indexTable"></span></td>
+		</tr>
+	</table>
+</body>
+<script type="text/javascript" src="script/drawer.js"></script>
+<script type="text/javascript" src="script/math.js"></script>
+<script type="text/javascript" src="script/wave.js"></script>
