@@ -22,17 +22,22 @@ let gChk48 = document.getElementById("chk48");
 let gChkPhase = document.getElementById("chkPhase");
 let gChkVelo = document.getElementById("chkVelo");
 let gChkAcc = document.getElementById("chkAcc");
+let gBtnPlay = document.getElementById("btnPlay");
 let gAmp = 127;
 let gFreq = 1;
 let gCalcVeloInterval = 100;
 let gCalcVeloCount = 0;
 
+gBtnPlay.onclick = (ev) => {
+	ev.target.value = ev.target.value == "再生" ? "停止" : "再生";
+};
+
 /******************************************************************************/
-let __phase_value = 0;
-let __phase_diff_sum = 0;
-let __velocity = 0;
-function VELOCITY_RESET() {__velocity = 0, __phase_diff_sum = 0}
-function VELOCITY_UPDATE() {__velocity = __phase_diff_sum, __phase_diff_sum = 0}
+let __theta = 0;
+let __theta_sum = 0;
+let __omega = 0;
+function VELOCITY_RESET() {__omega = 0, __theta_sum = 0}
+function VELOCITY_UPDATE() {__omega = __theta_sum, __theta_sum = 0}
 
 /******************************************************************************/
 function amp_onchange() {
@@ -45,8 +50,10 @@ function interval_onchange() {
 	gCalcVeloInterval = document.getElementById("rangeInterval").value;
 }
 function main() {
-	gDrawer.clear();
-	do_iteration();
+	if (gBtnPlay.value == "再生") {
+		gDrawer.clear();
+		do_iteration();
+	}
 	requestNextAnimationFrame(main);
 }
 {
@@ -60,6 +67,10 @@ function main() {
 }
 
 /******************************************************************************/
+const U_RE =  1.000, U_IM =  0.000;
+const V_RE = -0.500, V_IM =  0.866;
+const W_RE = -0.500, W_IM = -0.866;
+
 let x0 = 0, x1 = 0;
 let p0 = 0, p1 = 0;
 let f0 = 0, f1 = 0;
@@ -72,6 +83,10 @@ let va0 = 0, va1 = 0;
 let vb0 = 0, vb1 = 0;
 let wa0 = 0, wa1 = 0;
 let wb0 = 0, wb1 = 0;
+let detected_phase = 0;
+let u_re = U_RE, u_im = U_IM;
+let v_re = V_RE, v_im = V_IM;
+let w_re = W_RE, w_im = W_IM;
 let wave_u = 0, wave_v = 0, wave_w = 0;
 
 /******************************************************************************/
@@ -88,6 +103,7 @@ function disp_clear() {
 	vb0 = 0, vb1 = 0;
 	wa0 = 0, wa1 = 0;
 	wb0 = 0, wb1 = 0;
+	detected_phase = 0;
 	gDrawer.drawLineXY(0, HEIGHT / 2, WIDTH - 1, HEIGHT / 2, COLOR_AXIZ);
 	if (!gChkAcc.checked && gFreq <= 1.0) {
 		for (let i = -48; i <= 48; i++) {
@@ -143,9 +159,9 @@ function disp_wave() {
 		wb0 = wb1;
 	}
 	if (gChkUVW.checked) {
-		u1 = (0.5 - (wave_u - 128) / gAmp * 0.45) * HEIGHT;
-		v1 = (0.5 - (wave_v - 128) / gAmp * 0.45) * HEIGHT;
-		w1 = (0.5 - (wave_w - 128) / gAmp * 0.45) * HEIGHT;
+		u1 = (0.5 - wave_u / gAmp * 0.45) * HEIGHT;
+		v1 = (0.5 - wave_v / gAmp * 0.45) * HEIGHT;
+		w1 = (0.5 - wave_w / gAmp * 0.45) * HEIGHT;
 		gDrawer.drawLineXY(x0, u0, x1, u1, COLOR_UP);
 		gDrawer.drawLineXY(x0, v0, x1, v1, COLOR_VP);
 		gDrawer.drawLineXY(x0, w0, x1, w1, COLOR_WP);
@@ -154,15 +170,12 @@ function disp_wave() {
 		w0 = w1;
 	}
 	if (gChkPhase.checked) {
-		//p1 = (23 - g_phase + 0.5) / 24 * HEIGHT;
-		//gDrawer.drawLineXY(x0, p0, x1, p1, COLOR_PHASE);
-		//p0 = p1;
-		p1 = (0.5 - 0.5 * Math.sin(__phase_value * 2 * 3.141592 / 24)) * HEIGHT;
+		p1 = (0.5 - 0.5 * Math.sin(__theta * 2 * 3.141592 / 24)) * HEIGHT;
 		gDrawer.drawLineXY(x0, p0, x1, p1, COLOR_PHASE);
 		p0 = p1;
 	}
 	if (gChkVelo.checked) {
-		f1 = (1 - __velocity * 16 / 24 / 1024) * HEIGHT;
+		f1 = (1 - __omega * 16 / 24 / 1024) * HEIGHT;
 		gDrawer.drawLineXY(x0, f0, x1, f1, COLOR_VELOCITY);
 		f0 = f1;
 	}
@@ -176,18 +189,31 @@ function do_iteration() {
 	let delta = gChkAcc.checked ? 0 : nFreq;
 	for (let i = 0; i < SAMPLE_RATE; i++) {
 		x1 = parseInt(i * WIDTH / SAMPLE_RATE);
+		{
+			let theta = 2 * Math.PI * delta / SAMPLE_RATE;
+			let a_re = Math.cos(theta);
+			let a_im = Math.sin(theta);
+			let temp;
+			temp = u_re*a_re - u_im*a_im;
+			u_im = u_re*a_im + u_im*a_re;
+			u_re = temp;
+			temp = v_re*a_re - v_im*a_im;
+			v_im = v_re*a_im + v_im*a_re;
+			v_re = temp;
+			temp = w_re*a_re - w_im*a_im;
+			w_im = w_re*a_im + w_im*a_re;
+			w_re = temp;
+			delta += gChkAcc.checked ? (nFreq / SAMPLE_RATE) : 0;
+		}
 		let adc_u;
 		let adc_v;
 		{
-			const PHI = 2 * Math.PI / 3;
-			let theta = 2 * Math.PI * (i - (gChkAcc.checked ? 1 : 1) * SAMPLE_RATE / 2) / SAMPLE_RATE * delta;
-			delta += gChkAcc.checked ? (nFreq / SAMPLE_RATE) : 0;
 			let r = (Math.random() * 2 - 1) * gAmp * 0.05;
-			wave_u = 128 + int(r + gAmp * Math.sin(theta));
-			wave_v = 128 + int(r + gAmp * Math.sin(theta + PHI));
-			wave_w = 128 + int(r + gAmp * Math.sin(theta - PHI));
-			adc_u = wave_u;
-			adc_v = wave_v;
+			wave_u = r + gAmp * u_im;
+			wave_v = r + gAmp * v_im;
+			wave_w = r + gAmp * w_im;
+			adc_u = int(wave_u) + 128;
+			adc_v = int(wave_v) + 128;
 			if (adc_u < 0) adc_u = 0;
 			if (255 < adc_u) adc_u = 255;
 			if (adc_v < 0) adc_v = 0;
@@ -195,26 +221,26 @@ function do_iteration() {
 		}
 
 		/*** U相,V相の誘起電圧から位相を検出 ***/
-		let detected_phase = phase24_detect(adc_u, adc_v);
+		detected_phase = phase24_detect(adc_u, adc_v);
 
 		/*** 位相の変化量を積算 ***/
 		{
 			let phase_diff;
-			if (detected_phase < __phase_value) {
+			if (detected_phase < __theta) {
 				phase_diff = 24;
 			} else {
 				phase_diff = 0;
 			}
 			phase_diff += detected_phase;
-			phase_diff -= __phase_value;
+			phase_diff -= __theta;
 			if (phase_diff >= 12) {
 				phase_diff = 0;
 			}
-			__phase_diff_sum += phase_diff;
+			__theta_sum += phase_diff;
 		}
 
 		/*** 現在位相を更新 ***/
-		__phase_value = detected_phase;
+		__theta = detected_phase;
 
 		/*** 一定間隔で位相変化の積算値を速度として設定 ***/
 		if (gCalcVeloInterval <= gCalcVeloCount) {
@@ -228,5 +254,5 @@ function do_iteration() {
 	document.getElementById("dispAmp").value = gAmp;
 	document.getElementById("dispFreq").value = gFreq;
 	document.getElementById("dispInterval").value = int(gCalcVeloInterval);
-	document.getElementById("dispSFreq").value = "velocity: " + __velocity;
+	document.getElementById("dispSFreq").value = "velocity: " + __omega;
 }
