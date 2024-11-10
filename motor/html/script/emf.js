@@ -1,9 +1,11 @@
 /// <reference path="math.js" />
 /// <reference path="drawer.js" />
-const ROTOR_DIAMETER = 150;
-const STATOR_DIAMETER = 280;
+const ROTOR_DIAMETER = 100;
+const STATOR_DIAMETER = 240;
+const ROTOR_DIV = 48;
+const SLOT_DIV = 96;
 const WAVE_SCOPE_WIDTH = 320;
-const WAVE_SCOPE_HEIGHT = 220;
+const WAVE_SCOPE_HEIGHT = 200;
 const DISPLAY_SIZE = STATOR_DIAMETER + 20;
 const STATOR_POLES = [
 	new SelectElement("1", 1),
@@ -22,38 +24,35 @@ const ROTOR_POLES = [
 
 class MagneticDipole {
 	/**
-	 * @param {vec3} pos 位置
+	 * @param {vec3} p 位置
 	 * @param {vec3} m 磁気モーメント
 	 */
-	constructor(pos, m) {
-		/** 固定位置
+	constructor(p, m) {
+		/** 位置(固定)
 	 	 * @type {vec3} */
-		this.pos_const = new vec3(pos.X, pos.Y, pos.Z);
-		/** 移動位置
+		this.pc = new vec3(p.X, p.Y, p.Z);
+		/** 位置(変化)
 	 	 * @type {vec3} */
-		this.pos_move = new vec3(pos.X, pos.Y, pos.Z);
+		this.pv = new vec3(p.X, p.Y, p.Z);
 		/** 磁気モーメント(固定)
 	 	 * @type {vec3} */
-		this.m_const = new vec3(m.X, m.Y, m.Z);
-		/** 磁気モーメント(回転)
+		this.mc = new vec3(m.X, m.Y, m.Z);
+		/** 磁気モーメント(変化)
 	 	 * @type {vec3} */
-		this.m_rot = new vec3(m.X, m.Y, m.Z);
+		this.mv = new vec3(m.X, m.Y, m.Z);
 	}
 }
 
 class Rotor {
-	static #CALC_DIV = 50;
-
 	/** 半径
 	 * @type {number} */
 	radius = 0;
 	/** 極数
 	 * @type {number} */
 	poles = 0;
-	/** 磁気双極子
+	/** 磁気双極子リスト
 	 * @type {Array<MagneticDipole>} */
-	dipole = [];
-
+	dipoles = [];
 	/**
 	 * @param {number} radius 半径
 	 * @param {number} poles 極数
@@ -61,19 +60,19 @@ class Rotor {
 	 */
 	constructor(radius, poles, gap) {
 		const PI2 = 8*Math.atan(1);
-		const DIV = 3*Rotor.#CALC_DIV;
+		const DIV = 3*ROTOR_DIV;
 		this.radius = radius;
 		this.poles = poles;
-		this.dipole = [];
-		for (let idx_d = 0; idx_d < DIV; idx_d++) {
-			let p = parseInt(poles * idx_d / DIV);
-			let th = PI2 * idx_d / DIV;
-			let thA = PI2 * (p + gap * 0.5) / poles;
-			let thB = PI2 * (p + (1 - gap) + gap * 0.5) / poles;
+		this.dipoles = [];
+		for (let d = 0; d < DIV; d++) {
+			let pole = parseInt(poles * d / DIV);
+			let th = PI2 * d / DIV;
+			let thA = PI2 * (pole + gap * 0.5) / poles;
+			let thB = PI2 * (pole + (1 - gap) + gap * 0.5) / poles;
 			if (th < thA || thB < th) {
 			} else {
-				let ns = (0 == p % 2) ? 1 : -1;
-				let pos = new vec3(
+				let ns = (0 == pole % 2) ? 1 : -1;
+				let p = new vec3(
 					this.radius * Math.cos(th),
 					this.radius * Math.sin(th)
 				);
@@ -81,32 +80,30 @@ class Rotor {
 					ns * Math.cos(th),
 					ns * Math.sin(th)
 				);
-				this.dipole.push(new MagneticDipole(pos, m));
+				this.dipoles.push(new MagneticDipole(p, m));
 			}
 		}
 	}
 }
 
 class Slot {
-	static #CALC_DIV = 100;
-
 	/** 位置
 	 * @type {Array<vec3>} */
 	pos = [];
-	/** 磁場(表示位置)
-	 * @type {Array<vec3>} */
-	magnetic_pos = [];
 	/** 磁場(磁力)
 	 * @type {Array<number>} */
-	magnetic_force = [];
-	/** 電場(表示位置)
+	mf = [];
+	/** 磁場(表示位置)
 	 * @type {Array<vec3>} */
-	bemf_pos = [];
+	mp = [];
 	/** 電場(電位)
 	 * @type {Array<number>} */
-	bemf = [];
-
+	ef = [];
+	/** 電場(表示位置)
+	 * @type {Array<vec3>} */
+	ep = [];
 	/**
+	 * スロットを作成
 	 * @param {number} radius 半径
 	 * @param {number} gap スロット間ギャップ
 	 * @param {number} slots スロット数
@@ -115,33 +112,31 @@ class Slot {
 	 */
 	create(radius, gap, slots, slot_index, clear) {
 		const PI2 = 8*Math.atan(1);
-		const DIV = parseInt(Slot.#CALC_DIV * 3 / slots);
+		const DIV = parseInt(SLOT_DIV * 3 / slots);
 		const OFS_ANGLE = -Math.PI / slots;
-
 		// 位置
 		this.pos = [];
 		for (let d=DIV; 0<=d; d--) {
 			let th = OFS_ANGLE + PI2 * (slot_index + d*(1-gap) / DIV + gap*0.5) / slots;
 			this.pos.push(new vec3(radius*Math.cos(th), radius*Math.sin(th)));
 		}
-
 		// 磁場・電場
 		const MAGNETIC_R = radius + 7;
 		const BEMF_R = radius + 13;
-		let magnetic_force = [];
-		let bemf = [];
-		this.magnetic_pos = [];
-		this.bemf_pos = [];
+		let mf = [];
+		let ef = [];
+		this.mp = [];
+		this.ep = [];
 		for (let d=0; d<=DIV; d++) {
-			magnetic_force.push(0.0);
-			bemf.push(0.0);
+			mf.push(0.0);
+			ef.push(0.0);
 			let th = OFS_ANGLE + PI2 * (slot_index + d*(1-gap) / DIV + gap*0.5) / slots;
-			this.magnetic_pos.push(new vec3(MAGNETIC_R*Math.cos(th), MAGNETIC_R*Math.sin(th)));
-			this.bemf_pos.push(new vec3(BEMF_R*Math.cos(th), BEMF_R*Math.sin(th)));
+			this.mp.push(new vec3(MAGNETIC_R*Math.cos(th), MAGNETIC_R*Math.sin(th)));
+			this.ep.push(new vec3(BEMF_R*Math.cos(th), BEMF_R*Math.sin(th)));
 		}
 		if (clear) {
-			this.magnetic_force = magnetic_force;
-			this.bemf = bemf;
+			this.mf = mf;
+			this.ef = ef;
 		}
 	}
 }
@@ -156,40 +151,42 @@ class Motor {
 	TargetFreq = 0.0;
 	AccTime = 1.0;
 	OnlyU = false;
-	WaveScale = 0.2;
+	WaveScale = 0.1;
 
 	/** @type {Array<Slot>} */
-	#stator = [];
+	#slots = [];
 	/** @type {Rotor} */
 	#rotor = null;
 	#freq = 0.0;
 	#theta = 0.0;
 	#scopeX = 0;
-	#scopeA = new vec3();
 	#scopeU = new vec3();
 	#scopeV = new vec3();
 	#scopeW = new vec3();
+	#scopeA = new vec3();
 
 	/**
+	 * 固定子を作成
 	 * @param {number} diameter 直径
 	 * @param {number} poles 極数
 	 * @param {number} gap スロット間ギャップ
 	 * @param {boolean} clear 磁力・電位のクリアを行うか
 	 */
 	createStator(diameter, poles, gap, clear=true) {
-		const SLOTS = 3 * poles;
+		const SLOT_COUNT = 3 * poles;
 		if (clear) {
-			this.#stator = [];
+			this.#slots = [];
 		}
-		for (let s=0; s<SLOTS; s++) {
+		for (let s=0; s<SLOT_COUNT; s++) {
 			if (clear) {
-				this.#stator.push(new Slot());
+				this.#slots.push(new Slot());
 			}
-			this.#stator[s].create(diameter/2, gap, SLOTS, s, clear);
+			this.#slots[s].create(diameter/2, gap, SLOT_COUNT, s, clear);
 		}
 	}
 
 	/**
+	 * 回転子を作成
 	 * @param {number} diameter 直径
 	 * @param {number} poles 極数
 	 * @param {number} gap 磁極間ギャップ
@@ -203,11 +200,11 @@ class Motor {
 	 */
 	draw(drawer) {
 		// 回転子を描画
-		let rotor_dipole = this.#rotor.dipole;
-		for (let idx_p=0; idx_p<rotor_dipole.length; idx_p++) {
-			let dipole = rotor_dipole[idx_p];
-			let pos = dipole.pos_move;
-			let dir = dipole.m_rot;
+		let dipoles = this.#rotor.dipoles;
+		for (let ixP=0; ixP<dipoles.length; ixP++) {
+			let dipole = dipoles[ixP];
+			let pos = dipole.pv;
+			let dir = dipole.mv;
 			let ax = pos.X + dir.X * 2;
 			let ay = pos.Y + dir.Y * 2;
 			let bx = pos.X - dir.X * 2;
@@ -216,41 +213,43 @@ class Motor {
 			drawer.fillCircleXY(bx, by, 2.5, Color.BLUE, this.Pos);
 		}
 		// 固定子を描画
-		const scale_v = 1.0 / 2.0;
-		const scale_m = 0.25 / 2.0;
+		const SCALE_E = 1.0 / 2.0;
+		const SCALE_M = 0.25 / 2.0;
 		let posA = new vec3();
 		let posB = new vec3();
-		for(let idx_s=0; idx_s<this.#stator.length; idx_s++) {
-			let slot = this.#stator[idx_s];
-			let value_v = slot.bemf;
-			let value_m = slot.magnetic_force;
-			let pos_v = slot.bemf_pos;
-			let pos_m = slot.magnetic_pos;
-			for(let idx_v=0, idx_p=pos_v.length-2; idx_v<value_v.length-1; idx_v++, idx_p--) {
-				let v = (value_v[idx_v] + value_v[idx_v+1]) * scale_v;
-				pos_v[idx_p].add(this.Pos, posA);
-				pos_v[idx_p+1].add(this.Pos, posB);
-				drawer.drawLine(posA, posB, Drawer.ToHue(v), 20);
-				let m = (value_m[idx_v] + value_m[idx_v+1]) * scale_m;
-				pos_m[idx_p].add(this.Pos, posA);
-				pos_m[idx_p+1].add(this.Pos, posB);
+		for(let ixS=0; ixS<this.#slots.length; ixS++) {
+			let slot = this.#slots[ixS];
+			let ef = slot.ef;
+			let ep = slot.ep;
+			let mf = slot.mf;
+			let mp = slot.mp;
+			for(let ixF=0, ixP=ep.length-2; ixF<ef.length-1; ixF++, ixP--) {
+				// 電場
+				let e = (ef[ixF] + ef[ixF+1]) * SCALE_E;
+				ep[ixP].add(this.Pos, posA);
+				ep[ixP+1].add(this.Pos, posB);
+				drawer.drawLine(posA, posB, Drawer.ToHue(e), 20);
+				// 磁場
+				let m = (mf[ixF] + mf[ixF+1]) * SCALE_M;
+				mp[ixP].add(this.Pos, posA);
+				mp[ixP+1].add(this.Pos, posB);
 				drawer.drawLine(posA, posB, Drawer.ToHue(m), 10);
 			}
-
+			// ラベル
 			let name;
-			let background;
-			switch(idx_s%3) {
+			let color;
+			switch(ixS%3) {
 			case 0:
-				name = "U", background = Color.GREEN; break;
+				name = "U", color = Color.GREEN; break;
 			case 1:
-				name = "V", background = Color.BLUE; break;
+				name = "V", color = Color.BLUE; break;
 			case 2:
-				name = "W", background = Color.RED; break;
+				name = "W", color = Color.RED; break;
 			}
 			let middle = slot.pos[slot.pos.length >> 1];
 			middle.normalizeScale(middle.abs + 36, posA);
 			posA.add(this.Pos, posA);
-			drawer.fillCircle(posA, 12, background);
+			drawer.fillCircle(posA, 12, color);
 			drawer.drawStringC(posA, name, 16, Color.WHITE);
 		}
 	}
@@ -259,79 +258,84 @@ class Motor {
 	 * @param {Drawer} drawer
 	 */
 	drawWave(drawer) {
-		let sum_du = 0.0;
-		let sum_dv = 0.0;
-		let sum_dw = 0.0;
-		for(let s=0; s<this.#stator.length; s++) {
-			let slot = this.#stator[s];
-			let sum = 0.0;
-			for(let i=0; i<slot.bemf.length; i++) {
-				sum += slot.bemf[i];
+		// 各相の電位を合計
+		let eu = 0.0, ev = 0.0, ew = 0.0;
+		for(let ixS=0; ixS<this.#slots.length; ixS++) {
+			let slot = this.#slots[ixS];
+			let e = 0.0;
+			for(let i=0; i<slot.ef.length; i++) {
+				e += slot.ef[i];
 			}
-			sum /= slot.bemf.length;
-			sum *= this.WaveScale;
-			switch(s%3) {
+			e /= this.#slots.length;
+			e *= this.WaveScale;
+			switch(ixS%3) {
 			case 0:
-				sum_du += sum; break;
+				eu += e; break;
 			case 1:
-				sum_dv += sum; break;
+				ev += e; break;
 			case 2:
-				sum_dw += sum; break;
+				ew += e; break;
 			}
 		}
-		if (1 < sum_du) sum_du = 1;
-		if (sum_du < -1) sum_du = -1;
-		if (1 < sum_dv) sum_dv = 1;
-		if (sum_dv < -1) sum_dv = -1;
-		if (1 < sum_dw) sum_dw = 1;
-		if (sum_dw < -1) sum_dw = -1;
 
-		let disp_a = drawer.Height * (0.5-0.49*Math.cos(this.#theta*this.#rotor.poles/2));
-		let disp_u = drawer.Height * (0.5-0.5*sum_du);
-		let disp_v = drawer.Height * (0.5-0.5*sum_dv);
-		let disp_w = drawer.Height * (0.5-0.5*sum_dw);
-		let posA = new vec3(this.#scopeX, disp_a);
-		let posU = new vec3(this.#scopeX, disp_u);
-		let posV = new vec3(this.#scopeX, disp_v);
-		let posW = new vec3(this.#scopeX, disp_w);
-		drawer.drawLine(this.#scopeA, posA, Color.BLACK, 1);
-		drawer.drawLine(this.#scopeU, posU, Motor.#COLOR_U, 1);
-		if (!this.OnlyU) {
-			drawer.drawLine(this.#scopeV, posV, Motor.#COLOR_V, 1);
-			drawer.drawLine(this.#scopeW, posW, Motor.#COLOR_W, 1);
-		}
-		this.#scopeA = posA;
-		this.#scopeU = posU;
-		this.#scopeV = posV;
-		this.#scopeW = posW;
-		this.#scopeX += 2;
+		if (1 < eu) eu = 1;
+		if (eu < -1) eu = -1;
+		if (1 < ev) ev = 1;
+		if (ev < -1) ev = -1;
+		if (1 < ew) ew = 1;
+		if (ew < -1) ew = -1;
 
+		// 波形をクリア
 		if (drawer.Width <= this.#scopeX) {
 			const NEUTRAL = drawer.Height/2;
 			drawer.clear();
 			drawer.drawLine(new vec3(0, NEUTRAL), new vec3(drawer.Width, NEUTRAL), Motor.#COLOR_AXIZ, 1);
-			this.#scopeA = new vec3(0, NEUTRAL);
 			this.#scopeU = new vec3(0, NEUTRAL);
 			this.#scopeV = new vec3(0, NEUTRAL);
 			this.#scopeW = new vec3(0, NEUTRAL);
+			this.#scopeA = new vec3(0, NEUTRAL);
 			this.#scopeX = 0;
 		}
+
+		// 波形を描画
+		let yu = drawer.Height * (0.5-0.5*eu);
+		let yv = drawer.Height * (0.5-0.5*ev);
+		let yw = drawer.Height * (0.5-0.5*ew);
+		let ya = drawer.Height * (0.5-0.49*Math.cos(this.#theta*this.#rotor.poles/2));
+		let pu = new vec3(this.#scopeX, yu);
+		let pv = new vec3(this.#scopeX, yv);
+		let pw = new vec3(this.#scopeX, yw);
+		let pa = new vec3(this.#scopeX, ya);
+		drawer.drawLine(this.#scopeU, pu, Motor.#COLOR_U, 1);
+		if (!this.OnlyU) {
+			drawer.drawLine(this.#scopeV, pv, Motor.#COLOR_V, 1);
+			drawer.drawLine(this.#scopeW, pw, Motor.#COLOR_W, 1);
+		}
+		drawer.drawLine(this.#scopeA, pa, Color.BLACK, 1);
+		this.#scopeU = pu;
+		this.#scopeV = pv;
+		this.#scopeW = pw;
+		this.#scopeA = pa;
+		this.#scopeX += 2;
 	}
 
+	/**
+	 * ステップ実行
+	 */
 	step() {	
 		// 回転子を動かす
-		for (let idx_p=0; idx_p<this.#rotor.dipole.length; idx_p++) {
-			let dipole = this.#rotor.dipole[idx_p];
-			let px = dipole.pos_const.X;
-			let py = dipole.pos_const.Y;
-			let mx = dipole.m_const.X;
-			let my = dipole.m_const.Y;
-			let rx = Math.cos(this.#theta);
-			let ry = Math.sin(this.#theta);
-			dipole.pos_move.X = px*rx - py*ry;
-			dipole.pos_move.Y = px*ry + py*rx;
-			dipole.m_rot.X = mx*rx - my*ry;
-			dipole.m_rot.Y = mx*ry + my*rx;
+		let rx = Math.cos(this.#theta);
+		let ry = Math.sin(this.#theta);
+		for (let ixP=0; ixP<this.#rotor.dipoles.length; ixP++) {
+			let dipole = this.#rotor.dipoles[ixP];
+			let px = dipole.pc.X;
+			let py = dipole.pc.Y;
+			let mx = dipole.mc.X;
+			let my = dipole.mc.Y;
+			dipole.pv.X = px*rx - py*ry;
+			dipole.pv.Y = px*ry + py*rx;
+			dipole.mv.X = mx*rx - my*ry;
+			dipole.mv.Y = mx*ry + my*rx;
 		}
 		// 起電力の計算
 		this.calcEMF();
@@ -343,27 +347,32 @@ class Motor {
 		}
 	}
 
+	/**
+	 * 起電力の計算
+	 */
 	calcEMF() {
-		const R_MIN = 5.0 / this.#rotor.radius;
-		for (let idx_s=0; idx_s<this.#stator.length; idx_s++) {
-			let slot = this.#stator[idx_s];
-			for (let idx_d=0; idx_d<slot.bemf.length; idx_d++) {
-				let slot_pos = slot.pos[idx_d];
-				let magnetic_force = 0.0;
-				for (let idx_r=0; idx_r<this.#rotor.dipole.length; idx_r++) {
-					let dipole = this.#rotor.dipole[idx_r];
-					let rx = (slot_pos.X - dipole.pos_move.X) / this.#rotor.radius;
-					let ry = (slot_pos.Y - dipole.pos_move.Y) / this.#rotor.radius;
-					let r = Math.sqrt(rx*rx + ry*ry);
+		const R_UNIT = this.#rotor.radius;
+		const R_MIN = 5.0 / R_UNIT;
+		for (let ixS=0; ixS<this.#slots.length; ixS++) {
+			let slot = this.#slots[ixS];
+			for (let ixP=0; ixP<slot.pos.length; ixP++) {
+				let slotPos = slot.pos[ixP];
+				let mf = 0.0;
+				for (let ixD=0; ixD<this.#rotor.dipoles.length; ixD++) {
+					let dipole = this.#rotor.dipoles[ixD];
+					let rx = (slotPos.X - dipole.pv.X) / R_UNIT;
+					let ry = (slotPos.Y - dipole.pv.Y) / R_UNIT;
+					let rz = (slotPos.Z - dipole.pv.Z) / R_UNIT;
+					let r = Math.sqrt(rx*rx + ry*ry + rz*rz);
 					if (r < R_MIN) {
 						r = R_MIN;
 					}
-					let dot = dipole.m_rot.X * rx + dipole.m_rot.Y * ry;
-					magnetic_force += dot / r / r / r;
+					let dot = dipole.mv.X * rx + dipole.mv.Y * ry + dipole.mv.Z * rz;
+					mf += dot / r / r / r;
 				}
-				magnetic_force /= this.#rotor.dipole.length;
-				slot.bemf[idx_d] = -(magnetic_force - slot.magnetic_force[idx_d]);
-				slot.magnetic_force[idx_d] = magnetic_force;
+				mf /= this.#rotor.dipoles.length;
+				slot.ef[ixP] = -(mf - slot.mf[ixP]);
+				slot.mf[ixP] = mf;
 			}
 		}
 	}
@@ -372,7 +381,7 @@ class Motor {
 class Form {
 	constructor() {
 		addSelectEvent(document.getElementById("chkOnlyU"), (sender) => gMotor.OnlyU = sender.checked);
-		addScrollEvent(document.getElementById("trbWaveScale"), (sender) => gMotor.WaveScale = sender.value * 0.01);
+		addScrollEvent(document.getElementById("trbWaveScale"), (sender) => gMotor.WaveScale = sender.value * 0.001);
 		initSelectList(document.getElementById("cmbStatorPole"), STATOR_POLES);
 		addSelectEvent(document.getElementById("cmbStatorPole"), this.#cmbStatorPole_onSelect);
 		initSelectList(document.getElementById("cmbRotorPole"), ROTOR_POLES);

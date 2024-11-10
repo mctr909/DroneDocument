@@ -55,12 +55,14 @@ th {
 					<td class="color_v"><input type="checkbox" id="chkV" checked />V相</td>
 					<td class="color_w"><input type="checkbox" id="chkW" />W相</td>
 					<td class="color_z"><input type="checkbox" id="chkZ" />0相</td>
+					<td><input type="checkbox" id="chkQuantize" checked />量子化値を表示</td>
 				</tr>
 				<tr>
 					<td class="color_u"><input type="checkbox" id="chkUV" checked />U相-V相</td>
 					<td class="color_v"><input type="checkbox" id="chkVW" />V相-W相</td>
 					<td class="color_w"><input type="checkbox" id="chkWU" />W相-U相</td>
 					<td class="color_z"></td>
+					<td></td>
 				</tr>
 			</table>
 			<canvas id="graph"></canvas>
@@ -77,7 +79,11 @@ th {
 		</td></tr>
 		<tr><td><canvas id="spec"></canvas></td></tr>
 	</table>
-	<table>
+	<br>
+	<table border="1" style="border-collapse:collapse;">
+		<tr>
+			<th colspan="2"><a id="download" href="#" download="wave.c" onclick="createCode()">ソースコード保存</a></th>
+		</tr>
 		<tr>
 			<td style="vertical-align:top;"><span id="valueTable"></span></td>
 			<td style="vertical-align:top;"><span id="indexTable"></span></td>

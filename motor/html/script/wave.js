@@ -4,15 +4,15 @@ const SAMPLE_RATE = 800;
 const WIDTH = SAMPLE_RATE;
 const HEIGHT = 200;
 const HEIGHT_SPEC = 150;
-const SPEC_OVERLAP = 8;
+const SPEC_OVERLAP = 4;
 const SPEC_LIMIT = -80;
 
 const COLOR_AXIZ_MAJOR = new Color(96, 96, 96);
-const COLOR_AXIZ_MINOR = new Color(222, 222, 222);
+const COLOR_AXIZ_MINOR = new Color(210, 210, 210);
 const COLOR_Z = new Color(220, 220, 96);
-const COLOR_UD = new Color(220, 0, 0);
-const COLOR_VD = new Color(0, 0, 192);
-const COLOR_WD = new Color(0, 172, 0);
+const COLOR_UQ = new Color(220, 0, 0);
+const COLOR_VQ = new Color(0, 0, 192);
+const COLOR_WQ = new Color(0, 172, 0);
 const COLOR_UA = new Color(255, 192, 192);
 const COLOR_VA = new Color(210, 210, 255);
 const COLOR_WA = new Color(172, 220, 172);
@@ -20,78 +20,43 @@ const COLOR_UV = new Color(240, 0, 0);
 const COLOR_VW = new Color(0, 0, 192);
 const COLOR_WU = new Color(0, 172, 0);
 
-let x0 = 0, x1 = 0;
-let z0 = 0, z1 = 0;
-let ud0 = 0, ud1 = 0;
-let vd0 = 0, vd1 = 0;
-let wd0 = 0, wd1 = 0;
-let ua0 = 0, ua1 = 0;
-let va0 = 0, va1 = 0;
-let wa0 = 0, wa1 = 0;
-let uv0 = 0, uv1 = 0;
-let vw0 = 0, vw1 = 0;
-let wu0 = 0, wu1 = 0;
-
 let gDrawer = new Drawer("graph", WIDTH, HEIGHT);
 let gSpec = new Drawer("spec", WIDTH, HEIGHT_SPEC);
-let gZAmp = 0;
-let gAmp = 0;
-let gChkNormalize = true;
-let gChkSpec = true;
-let gChkMax = false;
-let gChkAvg = false;
-let gUV = true;
-let gVW = true;
-let gWU = true;
-let gU = true;
-let gV = true;
-let gW = true;
-let gZ = true;
-let gChanged = true;
+let RangeZAmp = 0;
+let RangeAmp = 0;
+let EnableNormalize = true;
+let EnableSpec = true;
+let EnableSpecAvg = false;
+let EnableSpecMax = false;
+let EnableUV = true;
+let EnableVW = true;
+let EnableWU = true;
+let EnableU = true;
+let EnableV = true;
+let EnableW = true;
+let EnableZ = true;
+let EnableQuantize = true;
+let Changed = true;
 
 let PHASE_DIV = 12*2;
 let PHASE_DIV2 = PHASE_DIV*2;
 let PHASE_SHIFT = parseInt(PHASE_DIV/12);
 
 const NEUTRAL = 128;
-const INDEX_STEP = 1;
-let INDEX_BITS = 4;
-let INDEX_MASK       = 0b1111;
-let INDEX_MASK_VALUE = 0b0011;
-let INDEX_MASK_MINUS = 0b0100;
-let INDEX_MASK_ZERO  = 0b1000;
-let INDEX = [
-	0x1, 0x17,
-	0x2, 0x07,
-	0x3, 0x87,
-	0x3, 0x46,
-	0x3, 0x55,
-	0x3, 0x64,
-	0x3, 0x78,
-	0x2, 0x70,
-	0x1, 0x71,
-	0x0, 0x72,
-	0x8, 0x73,
-	0x4, 0x63,
-	0x5, 0x53,
-	0x6, 0x43,
-	0x7, 0x83,
-	0x7, 0x02,
-	0x7, 0x11,
-	0x7, 0x20,
-	0x7, 0x38,
-	0x6, 0x34,
-	0x5, 0x35,
-	0x4, 0x36,
-	0x8, 0x37,
-	0x0, 0x27
-];
-let PHASE_STEP = 5;
-let VALUE_STEP = 5;
-let PHASE = [];
+let INDEX_BITS = 0;
+let INDEX_MASK = 0;
+let INDEX_MASK_VALUE = 0;
+let INDEX_MASK_MINUS = 0;
+let INDEX_MASK_ZERO  = 0;
+let INDEX = [];
+
+let VALUE_ALL_STEP = 0;
+let VALUE_ALL = [];
+let VALUE_STEP = 0;
 let VALUE = [];
+
+let MAXA = 0;
 let MAXD = [];
-let MAXA = [];
 let SPEC_AVG = [];
 let SPEC_MAX = [];
 
@@ -112,10 +77,9 @@ let SPEC_MAX = [];
 	document.getElementById("chkV").onchange = v_onchange;
 	document.getElementById("chkW").onchange = w_onchange;
 	document.getElementById("chkZ").onchange = z_onchange;
-	create_valueTable();
-	create_indexTable();
-	disp_valueTable();
-	disp_indexTable();
+	document.getElementById("chkQuantize").onchange = quantize_onchange;
+	createValueTable();
+	createIndexTable();
 	zamp_onchange();
 	amp_onchange();
 	normalize_onchange();
@@ -126,88 +90,80 @@ let SPEC_MAX = [];
 	v_onchange();
 	w_onchange();
 	z_onchange();
+	quantize_onchange();
 	requestNextAnimationFrame(main);
 }
 
 /******************************************************************************/
 function zamp_onchange() {
-	gZAmp = document.getElementById("rangeZ").value * 0.01;
-	create_valueTable();
-	create_indexTable();
-	update_valueTable();
-	update_indexTable();
-	gChanged = true;
+	RangeZAmp = document.getElementById("rangeZ").value * 0.01;
+	updateValueTable();
+	updateIndexTable();
+	Changed = true;
 }
 function amp_onchange() {
-	gAmp = document.getElementById("rangeAmp").value;
-	gChanged = true;
+	RangeAmp = document.getElementById("rangeAmp").value;
+	Changed = true;
 }
 function normalize_onchange() {
-	gChkNormalize = document.getElementById("chkNormalize").checked;
-	gChanged = true;
+	EnableNormalize = document.getElementById("chkNormalize").checked;
+	Changed = true;
 }
 function stepCount_onchange(obj) {
 	PHASE_DIV = obj.value*1;
 	PHASE_DIV2 = PHASE_DIV*2;
-	PHASE_SHIFT = parseInt(PHASE_DIV/12);
-	create_valueTable();
-	create_indexTable();
-	disp_valueTable();
-	disp_indexTable();
-	zamp_onchange();
-	amp_onchange();
-	normalize_onchange();
-	uv_onchange();
-	vw_onchange();
-	wu_onchange();
-	u_onchange();
-	v_onchange();
-	w_onchange();
-	z_onchange();
+	PHASE_SHIFT = PHASE_DIV/12;
+	createValueTable();
+	createIndexTable();
+	Changed = true;
 }
 function spec_onchange() {
-	gChkSpec = document.getElementById("chkSpec").checked;
-	gChanged = true;
+	EnableSpec = document.getElementById("chkSpec").checked;
+	Changed = true;
 }
 function max_onchange() {
-	gChkMax = document.getElementById("chkMax").checked;
-	gChanged = true;
+	EnableSpecMax = document.getElementById("chkMax").checked;
+	Changed = true;
 }
 function avg_onchange() {
-	gChkAvg = document.getElementById("chkAvg").checked;
-	gChanged = true;
+	EnableSpecAvg = document.getElementById("chkAvg").checked;
+	Changed = true;
 }
 function uv_onchange() {
-	gUV = document.getElementById("chkUV").checked;
-	gChanged = true;
+	EnableUV = document.getElementById("chkUV").checked;
+	Changed = true;
 }
 function vw_onchange() {
-	gVW = document.getElementById("chkVW").checked;
-	gChanged = true;
+	EnableVW = document.getElementById("chkVW").checked;
+	Changed = true;
 }
 function wu_onchange() {
-	gWU = document.getElementById("chkWU").checked;
-	gChanged = true;
+	EnableWU = document.getElementById("chkWU").checked;
+	Changed = true;
 }
 function u_onchange() {
-	gU = document.getElementById("chkU").checked;
-	gChanged = true;
+	EnableU = document.getElementById("chkU").checked;
+	Changed = true;
 }
 function v_onchange() {
-	gV = document.getElementById("chkV").checked;
-	gChanged = true;
+	EnableV = document.getElementById("chkV").checked;
+	Changed = true;
 }
 function w_onchange() {
-	gW = document.getElementById("chkW").checked;
-	gChanged = true;
+	EnableW = document.getElementById("chkW").checked;
+	Changed = true;
 }
 function z_onchange() {
-	gZ = document.getElementById("chkZ").checked;
-	gChanged = true;
+	EnableZ = document.getElementById("chkZ").checked;
+	Changed = true;
+}
+function quantize_onchange() {
+	EnableQuantize = document.getElementById("chkQuantize").checked;
+	Changed = true;
 }
 function valueTableCheck_onchange(obj) {
-	create_indexTable();
-	update_indexTable();
+	setIndexTable();
+	updateIndexTable();
 	let enableColCount = 0;
 	for (let i=0; ; i++) {
 		let obj = document.getElementById("tableValueCheck_" + i);
@@ -222,15 +178,15 @@ function valueTableCheck_onchange(obj) {
 			objhd.innerHTML = "[ ]";
 		}
 	}
-	gChanged = true;
+	Changed = true;
 }
 function valueTable_onchange(obj) {
 	let strId = obj.id;
 	let index = strId.indexOf("_") + 1;
 	index = strId.substring(index) * 1;
-	PHASE[index] = obj.value * 1;
-	let row = parseInt(index / PHASE_STEP);
-	let col = index % PHASE_STEP;
+	VALUE_ALL[index] = obj.value * 1;
+	let row = parseInt(index / VALUE_ALL_STEP);
+	let col = index % VALUE_ALL_STEP;
 	let chkObj = document.getElementById("tableValueCheck_" + col);
 	if (chkObj.checked) {
 		let enableColCount = 0;
@@ -247,94 +203,107 @@ function valueTable_onchange(obj) {
 				enableColCount++;
 			}
 		}
-		VALUE[row*enableColCount+editCol] = PHASE[index];
+		VALUE[row*enableColCount+editCol] = VALUE_ALL[index];
 	}
-	gChanged = true;
+	Changed = true;
 }
 
 /******************************************************************************/
 function main() {
-	if (gChanged) {
-		disp_clear();
-		calc_spec_avg();
-		disp_spec();
+	if (Changed) {
+		clearDisp();
 		for (let i = 0; i < SAMPLE_RATE; i++) {
 			x1 = parseInt(i * WIDTH / SAMPLE_RATE);
-			disp_wave();
+			dispWave();
 		}
-		document.getElementById("dispZ").value = "0." + parseInt(gZAmp*100);
-		document.getElementById("dispAmp").value = gAmp;
-		gChanged = false;
+		dispSpec();
+		document.getElementById("dispZ").value = "0." + parseInt(RangeZAmp*100);
+		document.getElementById("dispAmp").value = RangeAmp;
+		Changed = false;
 	}
 	requestNextAnimationFrame(main);
 }
 
 /******************************************************************************/
-function create_valueTable() {
-	MAXA = [2];
+function setValueTable() {
+	let maxA = 0;
+	for (let i=0; i<WIDTH; i++) {
+		let th = 2*Math.PI*i/WIDTH;
+		let val = Math.sin(th) + RangeZAmp*Math.sin(3*th);
+		val = Math.abs(val);
+		if (val > maxA) {
+			maxA = val;
+		}
+	}
+	MAXA = maxA*2.05;
 	MAXD = [1];
-	PHASE = [];
-	PHASE_STEP = PHASE_DIV / 4 - 1;
-	for (let i=0; i<PHASE_STEP; i++) {
-		PHASE.push(0);
+	VALUE_ALL = [];
+	VALUE_ALL_STEP = parseInt(PHASE_DIV / 4 + 0.5) - 1;
+	for (let i=0; i<VALUE_ALL_STEP; i++) {
+		VALUE_ALL.push(0);
 	}
 	for (let v = 4; v<=128; v+=2) {
-		let maxA = 0;
-		{
-			let max = 0;
-			let maxH = 0;
-			for (let i=0; i<WIDTH; i++) {
-				let th = 2*Math.PI*i/WIDTH;
-				let valU = Math.sin(th) + gZAmp*Math.sin(3*th);
-				valU = Math.abs(valU);
-				if (valU > max) {
-					max = valU;
-				}
-				valU *= 2;
-				if (valU > maxH) {
-					maxH = valU;
-				}
-			}
-			MAXA.push(maxH);
-			if (max > maxA) {
-				maxA = max;
-			}
-		}
-		{
-			let max = 0;
-			for (let i=0; i<PHASE_DIV; i++) {
-				let th = 2*Math.PI*i/PHASE_DIV;
-				let valZ = gZAmp*Math.sin(3*th);
-				let valU = valZ + Math.sin(th);
-				let valV = valZ + Math.sin(th + 2*Math.PI/3);
-				valU *= v / maxA;
-				valV *= v / maxA;
-				if (valU > 127) {
-					valU = 127;
-				}
-				if (valV > 127) {
-					valV = 127;
-				}
-				let val = parseInt(Math.abs(valU - valV));
-				if (val > max) {
-					max = val;
-				}
-			}
-			MAXD.push(max);
-		}
-		for (let i=1; i<=PHASE_STEP; i++) {
-			let th = 2*Math.PI*i/PHASE_DIV;
-			let val = Math.sin(th) + gZAmp*Math.sin(3*th);
+		let max = 0;
+		for (let i=0; i<VALUE_ALL_STEP; i++) {
+			let th = 2*Math.PI*(i+1)/PHASE_DIV;
+			let val = Math.sin(th) + RangeZAmp*Math.sin(3*th);
 			val *= v / maxA;
 			val = parseInt(val);
 			if (val > 127) {
 				val = 127;
 			}
-			PHASE.push(val);
+			if (val > max) {
+				max = val;
+			}
+			VALUE_ALL.push(val);			
+		}
+		MAXD.push(max*2.05);
+	}
+}
+function createValueTable() {
+	setValueTable();
+	let table = "<table border='1' style='border-collapse:collapse;'>";
+	table += "<tr>";
+	table += "<th colspan='" + (VALUE_ALL_STEP + 1) + "'>値テーブル</th>";
+	table += "</tr>"
+	table += "<tr>";
+	table += "<th></th>";
+	for (let i = 0; i < VALUE_ALL_STEP; i++) {
+		table += "<th>";
+		table += "<input type='checkbox' onchange='valueTableCheck_onchange(this);'";
+		table += " id='tableValueCheck_" + i + "' checked/>";
+		table += "<div id='valueTableHead_" + i + "'>[" + i + "]</div></th>";
+	}
+	table += "</tr>";
+	for (let v = 1, j = VALUE_ALL_STEP; j < VALUE_ALL.length; v++, j += VALUE_ALL_STEP) {
+		table += "<tr>";
+		table += "<th>[" + v + "]</th>";
+		for (let i = 0; i < VALUE_ALL_STEP; i++) {
+			let val = VALUE_ALL[j + i];
+			table += "<td>";
+			table += "<input style='width:30px;' onchange='valueTable_onchange(this);'";
+			table += " value='" + val + "'";
+			table += " id='tableValue_" + (j + i) + "'";
+			table += "/>";
+			table += "</td>";
+		}
+		table += "</tr>";
+	}
+	table += "</table>";
+	document.getElementById("valueTable").innerHTML = table;
+}
+function updateValueTable() {
+	setValueTable();
+	for (let v = 1, j = VALUE_ALL_STEP; j < VALUE_ALL.length; v++, j += VALUE_ALL_STEP) {
+		for (let i = 0; i < VALUE_ALL_STEP; i++) {
+			let obj = document.getElementById("tableValue_" + (j + i));
+			if (null != obj) {
+				obj.value = VALUE_ALL[j + i];
+			}
 		}
 	}
 }
-function create_indexTable() {
+function setIndexTable() {
 	let enableValues = [];
 	let enableSteps = [];
 	for (let i=0; ; i++) {
@@ -344,16 +313,16 @@ function create_indexTable() {
 		}
 		if (chkObj.checked) {
 			let th = 2*Math.PI*(i+1)/PHASE_DIV;
-			let valZ = gZAmp*Math.sin(3*th);
+			let valZ = RangeZAmp*Math.sin(3*th);
 			let valU = valZ + Math.sin(th);
 			enableValues.push(valU);
 			enableSteps.push(i);
 		}
 	}
 	VALUE = [];
-	for (let j=0; j<PHASE.length; j+=PHASE_STEP) {
+	for (let j=0; j<VALUE_ALL.length; j+=VALUE_ALL_STEP) {
 		for (let i=0; i<enableSteps.length; i++) {
-			VALUE.push(PHASE[j + enableSteps[i]]);
+			VALUE.push(VALUE_ALL[j + enableSteps[i]]);
 		}
 	}
 	VALUE_STEP = enableSteps.length;
@@ -381,35 +350,87 @@ function create_indexTable() {
 	INDEX = new Array(PHASE_DIV);
 	for (let p=0; p<PHASE_DIV; p++) {
 		let th = 2*Math.PI*(p+PHASE_SHIFT)/PHASE_DIV;
-		let valZ = gZAmp*Math.sin(3*th);
+		let valZ = RangeZAmp*Math.sin(3*th);
 		let valU = valZ + Math.sin(th);
 		let valV = valZ + Math.sin(th + 2*Math.PI/3);
 		let valW = valZ + Math.sin(th - 2*Math.PI/3);
-		set_index(enableValues, p, 0, valU);
-		set_index(enableValues, p, 1, valV);
-		set_index(enableValues, p, 2, valW);
+		setIndex(p, 0, findIndex(enableValues, valU));
+		setIndex(p, 1, findIndex(enableValues, valV));
+		setIndex(p, 2, findIndex(enableValues, valW));
 	}
 }
-function set_index(enableValues, step, phase, value) {
+function createIndexTable() {
+	setIndexTable();
+	let table = "<table border='1' style='border-collapse:collapse;'>";
+	table += "<tr>";
+	table += "<th colspan='5'>値テーブル索引</th>";
+	table += "</tr>";
+	table += "<tr>";
+	table += "<th></th>";
+	table += "<th>U</th>";
+	table += "<th>V</th>";
+	table += "<th>W</th>";
+	table += "</tr>";
+	for (let i=0,j=0; i<PHASE_DIV; i++, j+=3) {
+		let idx = getIndex(i);
+		let strU = indexToText(idx.u);
+		let strV = indexToText(idx.v);
+		let strW = indexToText(idx.w);
+		table += "<tr>";
+		table += "<th>[" + i + "]</th>";
+		table += "<td class='index' id='indexU_" + i + "'>";
+		table += strU;
+		table += "</td><td class='index' id='indexV_" + i + "'>";
+		table += strV;
+		table += "</td><td class='index' id='indexW_" + i + "'>";
+		table += strW;
+		table += "</td>";
+		table += "</tr>";
+	}
+	table += "</table>";
+	document.getElementById("indexTable").innerHTML = table;
+}
+function updateIndexTable() {
+	setIndexTable();
+	for (let i=0; i<PHASE_DIV; i++) {
+		let idx = getIndex(i);
+		let objU = document.getElementById("indexU_" + i);
+		let objV = document.getElementById("indexV_" + i);
+		let objW = document.getElementById("indexW_" + i);
+		objU.innerHTML = indexToText(idx.u);
+		objV.innerHTML = indexToText(idx.v);
+		objW.innerHTML = indexToText(idx.w);
+	}
+}
+function findIndex(enableValues, value) {
 	let sign = Math.sign(value);
 	value = Math.abs(value);
-	let index = null;
-	if (value >= enableValues[0]-0.0001) {
+	let index = 0;
+	if (value > enableValues[0]-0.0001) {
 		let min = 256;
 		for (let i=0; i<enableValues.length; i++) {
 			let diff = Math.abs(enableValues[i] - value);
 			if (diff < min) {
 				min = diff;
-				index = i;
+				index = i + 1;
 			}
 		}
 	}
-	if (null == index) {
+	return index * sign;
+}
+function setIndex(step, phase, index) {
+	if (null == index || "" == index || 0 == index) {
 		index = INDEX_MASK_ZERO;
 	} else {
-		index = index & INDEX_MASK_VALUE;
-		if (sign < 0) {
+		index = parseInt(index);
+		if (index < 0) {
+			index *= -1;
+			index--;
+			index &= INDEX_MASK_VALUE;
 			index |= INDEX_MASK_MINUS;
+		} else {
+			index--;
+			index &= INDEX_MASK_VALUE;
 		}
 	}
 	switch (INDEX_BITS) {
@@ -454,7 +475,7 @@ function set_index(enableValues, step, phase, value) {
 		break;
 	}
 }
-function get_index(step) {
+function getIndex(step) {
 	switch (INDEX_BITS) {
 	case 4:
 		step <<= 1;
@@ -497,8 +518,8 @@ function indexToText(index) {
 		return "";
 	}
 }
-function wave_gen(amp, phase) {
-	let idx = get_index(phase);
+function genWave(amp, phase) {
+	let idx = getIndex(phase);
 	let index_u = idx.u;
 	let index_v = idx.v;
 	let index_w = idx.w;
@@ -538,13 +559,13 @@ function wave_gen(amp, phase) {
 	}
 	return {u:value_u, v:value_v, w:value_w};
 }
-function calc_spec(amp, normalize) {
+function calcSpec(amp, normalize) {
 	const N = PHASE_DIV*SPEC_OVERLAP;
 	const MIN = Math.pow(10, SPEC_LIMIT/20);
 	const AMP_D = 1 / (normalize ? MAXD[amp] : 255);
 	let wave = [];
 	for (let i=0; i<PHASE_DIV; i++) {
-		let value = wave_gen(amp, i);
+		let value = genWave(amp, i);
 		let valueUd = (value.u - NEUTRAL) * AMP_D;
 		let valueVd = (value.v - NEUTRAL) * AMP_D;
 		let val = valueUd - valueVd;
@@ -570,14 +591,14 @@ function calc_spec(amp, normalize) {
 	}
 	return spec;
 }
-function calc_spec_avg() {
-	SPEC_MAX = calc_spec(1, false);
+function calcSpecAvg() {
+	SPEC_MAX = calcSpec(1, false);
 	SPEC_AVG = [];
 	for (let i=0; i<SPEC_MAX.length; i++) {
 		SPEC_AVG.push(SPEC_MAX[i]);
 	}
 	for (let a=2; a<64; a++) {
-		let s = calc_spec(a, false);
+		let s = calcSpec(a, false);
 		for (let i=0; i<s.length; i++) {
 			if (s[i] > SPEC_MAX[i]) {
 				SPEC_MAX[i] = s[i];
@@ -590,91 +611,88 @@ function calc_spec_avg() {
 		SPEC_AVG[i] = -Math.sqrt((SPEC_AVG[i] - avg1)/64);
 	}
 }
-
-/******************************************************************************/
-function disp_valueTable() {
-	let table = "<table border='1' style='border-collapse:collapse;'>";
-	table += "<tr>";
-	table += "<th colspan='" + (PHASE_STEP + 1) + "'>値テーブル</th>";
-	table += "</tr>"
-	table += "<tr>";
-	table += "<th></th>";
-	for (let i = 0; i < PHASE_STEP; i++) {
-		table += "<th>";
-		table += "<input type='checkbox' onchange='valueTableCheck_onchange(this);'";
-		table += " id='tableValueCheck_" + i + "' checked/>";
-		table += "<div id='valueTableHead_" + i + "'>[" + i + "]</div></th>";
-	}
-	table += "</tr>";
-	for (let v = 1, j = PHASE_STEP; j < PHASE.length; v++, j += PHASE_STEP) {
-		table += "<tr>";
-		table += "<th>[" + v + "]</th>";
-		for (let i = 0; i < PHASE_STEP; i++) {
-			let val = PHASE[j + i];
-			table += "<td>";
-			table += "<input style='width:30px;' onchange='valueTable_onchange(this);'";
-			table += " value='" + val + "'";
-			table += " id='tableValue_" + (j + i) + "'";
-			table += "/>";
-			table += "</td>";
-		}
-		table += "</tr>";
-	}
-	table += "</table>";
-	document.getElementById("valueTable").innerHTML = table;
-}
-function update_valueTable() {
-	for (let v = 1, j = PHASE_STEP; j < PHASE.length; v++, j += PHASE_STEP) {
-		for (let i = 0; i < PHASE_STEP; i++) {
-			let obj = document.getElementById("tableValue_" + (j + i));
-			if (null != obj) {
-				obj.value = PHASE[j + i];
+function createCode() {
+	let str = "/**********************************************************/\r\n";
+	str += "#define VALUE_STEP  " + VALUE_STEP + "\r\n";
+	str += "#define VALUE_COUNT " + VALUE.length + "\r\n";
+	str += "static const VALUE[VALUE_COUNT] = {\r\n";
+	for (let j=0,row=0; j<VALUE.length; j+=VALUE_STEP,row++) {
+		str += "    ";
+		for (let i=0,idx=row*VALUE_STEP; i<VALUE_STEP; i++,idx++) {
+			str += VALUE[idx];
+			if (idx<VALUE.length-1) {
+				str += ",";
 			}
 		}
+		str += "\r\n";
+	}
+	str += "};\r\n";
+	str += "\r\n";
+	str += "/**********************************************************/\r\n";
+	let indexStep;
+	switch (INDEX_BITS) {
+	case 4:
+	case 5:
+		indexStep = 2;
+		break;
+	case 8:
+		indexStep = 3;
+		break;
+	}
+	str += "#define INDEX_COUNT " + INDEX.length + "\r\n";
+	str += "#define INDEX_BITS  " + INDEX_BITS + "\r\n";
+	str += "#define INDEX_MASK       " + toBin(INDEX_MASK, INDEX_BITS) + "\r\n";
+	str += "#define INDEX_MASK_ZERO  " + toBin(INDEX_MASK_ZERO, INDEX_BITS) + "\r\n";
+	str += "#define INDEX_MASK_MINUS " + toBin(INDEX_MASK_MINUS, INDEX_BITS) + "\r\n";
+	str += "#define INDEX_MASK_VALUE " + toBin(INDEX_MASK_VALUE, INDEX_BITS) + "\r\n";
+	str += "static const INDEX[INDEX_COUNT] = {\r\n";
+	for (let j=0,row=0; j<INDEX.length; j+=indexStep,row++) {
+		str += "    ";
+		for (let i=0,idx=row*indexStep; i<indexStep; i++,idx++) {
+			str += toHex(INDEX[idx]);
+			if (idx<INDEX.length-1) {
+				str += ",";
+			}
+		}
+		str += "\r\n";
+	}
+	str += "};";
+	var blob = new Blob([ str ], { "type" : "text/plain" });
+	if (window.navigator.msSaveBlob) { 
+		window.navigator.msSaveBlob(blob, "test.txt"); 
+		window.navigator.msSaveOrOpenBlob(blob, "test.txt"); 
+	} else {
+		document.getElementById("download").href = window.URL.createObjectURL(blob);
 	}
 }
-function disp_indexTable() {
-	let table = "<table border='1' style='border-collapse:collapse;'>";
-	table += "<tr>";
-	table += "<th colspan='5'>値テーブル索引</th>";
-	table += "</tr>";
-	table += "<tr>";
-	table += "<th></th>";
-	table += "<th>U</th>";
-	table += "<th>V</th>";
-	table += "<th>W</th>";
-	table += "</tr>";
-	for (let i=0,j=0; i<PHASE_DIV; i++, j+=3) {
-		let idx = get_index(i);
-		let strU = indexToText(idx.u);
-		let strV = indexToText(idx.v);
-		let strW = indexToText(idx.w);
-		table += "<tr>";
-		table += "<th>[" + i + "]</th>";
-		table += "<td class='index' id='indexU_" + i + "'>";
-		table += strU;
-		table += "</td><td class='index' id='indexV_" + i + "'>";
-		table += strV;
-		table += "</td><td class='index' id='indexW_" + i + "'>";
-		table += strW;
-		table += "</td>";
-		table += "</tr>";
-	}
-	table += "</table>";
-	document.getElementById("indexTable").innerHTML = table;
-}
-function update_indexTable() {
-	for (let i=0; i<PHASE_DIV; i++) {
-		let idx = get_index(i);
-		let objU = document.getElementById("indexU_" + i);
-		let objV = document.getElementById("indexV_" + i);
-		let objW = document.getElementById("indexW_" + i);
-		objU.innerHTML = indexToText(idx.u);
-		objV.innerHTML = indexToText(idx.v);
-		objW.innerHTML = indexToText(idx.w);
+function toBin(value, bitCount=8) {
+	let str = value.toString(2);
+	if (bitCount <= 4) {
+		return "0b" + "0000".substring(0, 4 - str.length) + str;
+	} else {
+		return "0b" + "00000000".substring(0, 8 - str.length) + str;
 	}
 }
-function disp_clear() {
+function toHex(value) {
+	let str = value.toString(16);
+	return "0x" + "00".substring(0, 2 - str.length) + str;
+}
+
+/******************************************************************************/
+let x0 = 0, x1 = 0;
+let z0 = 0, z1 = 0;
+let ud0 = 0, ud1 = 0;
+let vd0 = 0, vd1 = 0;
+let wd0 = 0, wd1 = 0;
+let ua0 = 0, ua1 = 0;
+let va0 = 0, va1 = 0;
+let wa0 = 0, wa1 = 0;
+let uv0 = 0, uv1 = 0;
+let vw0 = 0, vw1 = 0;
+let wu0 = 0, wu1 = 0;
+
+/******************************************************************************/
+function clearDisp() {
 	x0 = 0, x1 = 0;
 	z0 = HEIGHT / 2, z1 = z0;
 	ud0 = HEIGHT / 2, ud1 = ud0;
@@ -699,74 +717,18 @@ function disp_clear() {
 		}
 		gDrawer.drawLineXY(x, HEIGHT / 2 - axizY, x, HEIGHT / 2 + axizY, COLOR_AXIZ_MAJOR);
 	}
+	gDrawer.drawLineXY(0, HEIGHT*3/4, WIDTH - 1, HEIGHT*3/4, COLOR_AXIZ_MINOR);
+	gDrawer.drawLineXY(0, HEIGHT*1/4, WIDTH - 1, HEIGHT*1/4, COLOR_AXIZ_MINOR);
 	for (let i = 0; i <= PHASE_DIV2; i+=2) {
 		let x = i * WIDTH / PHASE_DIV2;
 		gDrawer.drawStringC(new vec3(x, HEIGHT / 2 + 14), i % PHASE_DIV, 14);
 	}
 }
-function disp_spec() {
-	gSpec.clear();
-	gSpec.drawLineXY(0, 0, WIDTH - 1, 0, COLOR_AXIZ_MAJOR);
-	for (let i = 0; i < -SPEC_LIMIT; i++) {
-		let y = -i * HEIGHT_SPEC / SPEC_LIMIT;
-		if (0 == i%10) {
-			gSpec.drawLineXY(0, y, WIDTH, y, COLOR_AXIZ_MINOR);
-		}
-	}
-	let spec = calc_spec(gAmp, gChkNormalize);
-	const SPEC_WIDTH = spec.length;
-	const X_DELTA = WIDTH / SPEC_WIDTH;
-	for (let i = 0; i <= SPEC_WIDTH; i++) {
-		let x = i * X_DELTA;
-		if (0 == i % PHASE_DIV) {
-			gSpec.drawLineXY(x, 0, x, HEIGHT_SPEC, COLOR_AXIZ_MAJOR);
-		} else {
-			gSpec.drawLineXY(x, 0, x, HEIGHT_SPEC, COLOR_AXIZ_MINOR);
-		}
-	}
-	if (gChkMax) {
-		let x0 = 0;
-		let value0 = SPEC_MAX[0] * HEIGHT_SPEC / SPEC_LIMIT;
-		for (let i = 0; i <= SPEC_WIDTH; i++) {
-			let x1 = i * X_DELTA;
-			let value1 = SPEC_MAX[i] * HEIGHT_SPEC / SPEC_LIMIT;
-			gSpec.drawLineXY(x0, value0, x1, value1, COLOR_UA, 3);
-			x0 = x1;
-			value0 = value1;
-		}
-	}
-	if (gChkAvg) {
-		let x0 = 0;
-		let value0 = SPEC_AVG[0] * HEIGHT_SPEC / SPEC_LIMIT;
-		for (let i = 0; i <= SPEC_WIDTH; i++) {
-			let x1 = i * X_DELTA;
-			let value1 = SPEC_AVG[i] * HEIGHT_SPEC / SPEC_LIMIT;
-			gSpec.drawLineXY(x0, value0, x1, value1, COLOR_WD);
-			x0 = x1;
-			value0 = value1;
-		}
-	}
-	if (gChkSpec) {
-		let x0 = 0;
-		let value0 = spec[0] * HEIGHT_SPEC / SPEC_LIMIT;
-		for (let i = 0; i <= SPEC_WIDTH; i++) {
-			let x1 = i * X_DELTA;
-			let value1 = spec[i] * HEIGHT_SPEC / SPEC_LIMIT;
-			gSpec.drawLineXY(x0, value0, x1, value1);
-			x0 = x1;
-			value0 = value1;
-		}
-	}
-	for (let i = 0; i <= SPEC_WIDTH; i+=PHASE_DIV) {
-		let x = i * X_DELTA;
-		gSpec.drawStringC(new vec3(x, 8), "x" + i, 14);
-	}
-}
-function disp_wave() {
+function dispWave() {
 	let phase = parseInt(x1 * PHASE_DIV2 / WIDTH) % PHASE_DIV;
-	let wave = wave_gen(gAmp, phase);
+	let wave = genWave(RangeAmp, phase);
 
-	let ampD = 1 / (gChkNormalize ? MAXD[gAmp] : 255);
+	let ampD = 1 / (EnableNormalize ? MAXD[RangeAmp] : 256);
 	let valueUd = (wave.u - NEUTRAL) * ampD;
 	let valueVd = (wave.v - NEUTRAL) * ampD;
 	let valueWd = (wave.w - NEUTRAL) * ampD;
@@ -788,11 +750,11 @@ function disp_wave() {
 	wu1 *= HEIGHT;
 
 	let th = 4 * Math.PI * x1 / WIDTH + 2*Math.PI*PHASE_SHIFT/PHASE_DIV;
-	let valueZ = gZAmp*Math.sin(3*th);
+	let valueZ = RangeZAmp*Math.sin(3*th);
 	let valueUa = valueZ + Math.sin(th);
 	let valueVa = valueZ + Math.sin(th + 2*Math.PI/3);
 	let valueWa = valueZ + Math.sin(th - 2*Math.PI/3);
-	let ampA = 1.15 / (gChkNormalize ? MAXA[gAmp] : (127/gAmp));
+	let ampA = (EnableNormalize ? 1 : (RangeAmp/63)) / MAXA;
 	z1 = 0.5 - 0.5 * valueZ * ampA;
 	ua1 = 0.5 - 0.5 * valueUa * ampA;
 	va1 = 0.5 - 0.5 * valueVa * ampA;
@@ -802,35 +764,52 @@ function disp_wave() {
 	va1 *= HEIGHT;
 	wa1 *= HEIGHT;
 
-	if (gZ) {
+	if (EnableZ) {
 		gDrawer.drawLineXY(x0, z0, x1, z1, COLOR_Z, 3);
 	}
-	if (gWU) {
-		gDrawer.drawLineXY(x0, wu0, x1, wu1, COLOR_WU, 3);
+	if (EnableQuantize) {
+		if (EnableWU) {
+			gDrawer.drawLineXY(x0, wu0, x1, wu1, COLOR_WU, 3);
+		}
+		if (EnableVW) {
+			gDrawer.drawLineXY(x0, vw0, x1, vw1, COLOR_VW, 3);
+		}
+		if (EnableUV) {
+			gDrawer.drawLineXY(x0, uv0, x1, uv1, COLOR_UV, 3);
+		}
+	} else {
+		if (EnableWU) {
+			wu1 = wa1 - ua1 + HEIGHT/2;
+			gDrawer.drawLineXY(x0, wu0, x1, wu1, COLOR_WQ, 3);
+		}
+		if (EnableVW) {
+			vw1 = va1 - wa1 + HEIGHT/2;
+			gDrawer.drawLineXY(x0, vw0, x1, vw1, COLOR_VQ, 3);
+		}
+		if (EnableUV) {
+			uv1 = ua1 - va1 + HEIGHT/2;
+			gDrawer.drawLineXY(x0, uv0, x1, uv1, COLOR_UQ, 3);
+		}
 	}
-	if (gVW) {
-		gDrawer.drawLineXY(x0, vw0, x1, vw1, COLOR_VW, 3);
-	}
-	if (gUV) {
-		gDrawer.drawLineXY(x0, uv0, x1, uv1, COLOR_UV, 3);
-	}
-	if (gW) {
+	if (EnableW) {
 		gDrawer.drawLineXY(x0, wa0, x1, wa1, COLOR_WA, 3);
 	}
-	if (gV) {
+	if (EnableV) {
 		gDrawer.drawLineXY(x0, va0, x1, va1, COLOR_VA, 3);
 	}
-	if (gU) {
+	if (EnableU) {
 		gDrawer.drawLineXY(x0, ua0, x1, ua1, COLOR_UA, 3);
 	}
-	if (gW) {
-		gDrawer.drawLineXY(x0, wd0, x1, wd1, COLOR_WD);
-	}
-	if (gV) {
-		gDrawer.drawLineXY(x0, vd0, x1, vd1, COLOR_VD);
-	}
-	if (gU) {
-		gDrawer.drawLineXY(x0, ud0, x1, ud1, COLOR_UD);
+	if (EnableQuantize) {
+		if (EnableW) {
+			gDrawer.drawLineXY(x0, wd0, x1, wd1, COLOR_WQ);
+		}
+		if (EnableV) {
+			gDrawer.drawLineXY(x0, vd0, x1, vd1, COLOR_VQ);
+		}
+		if (EnableU) {
+			gDrawer.drawLineXY(x0, ud0, x1, ud1, COLOR_UQ);
+		}
 	}
 
 	x0 = x1;
@@ -844,4 +823,63 @@ function disp_wave() {
 	uv0 = uv1;
 	vw0 = vw1;
 	wu0 = wu1;
+}
+function dispSpec() {
+	gSpec.clear();
+	gSpec.drawLineXY(0, 0, WIDTH - 1, 0, COLOR_AXIZ_MAJOR);
+	for (let i = 0; i < -SPEC_LIMIT; i++) {
+		let y = -i * HEIGHT_SPEC / SPEC_LIMIT;
+		if (0 == i%10) {
+			gSpec.drawLineXY(0, y, WIDTH, y, COLOR_AXIZ_MINOR);
+		}
+	}
+	let spec = calcSpec(RangeAmp, EnableNormalize);
+	calcSpecAvg();
+	const SPEC_WIDTH = spec.length;
+	const X_DELTA = WIDTH / SPEC_WIDTH;
+	for (let i = 0; i <= SPEC_WIDTH; i++) {
+		let x = i * X_DELTA;
+		if (0 == i % PHASE_DIV) {
+			gSpec.drawLineXY(x, 0, x, HEIGHT_SPEC, COLOR_AXIZ_MAJOR);
+		} else {
+			gSpec.drawLineXY(x, 0, x, HEIGHT_SPEC, COLOR_AXIZ_MINOR);
+		}
+	}
+	if (EnableSpecMax) {
+		let x0 = 0;
+		let value0 = SPEC_MAX[0] * HEIGHT_SPEC / SPEC_LIMIT;
+		for (let i = 0; i <= SPEC_WIDTH; i++) {
+			let x1 = i * X_DELTA;
+			let value1 = SPEC_MAX[i] * HEIGHT_SPEC / SPEC_LIMIT;
+			gSpec.drawLineXY(x0, value0, x1, value1, COLOR_UA, 3);
+			x0 = x1;
+			value0 = value1;
+		}
+	}
+	if (EnableSpecAvg) {
+		let x0 = 0;
+		let value0 = SPEC_AVG[0] * HEIGHT_SPEC / SPEC_LIMIT;
+		for (let i = 0; i <= SPEC_WIDTH; i++) {
+			let x1 = i * X_DELTA;
+			let value1 = SPEC_AVG[i] * HEIGHT_SPEC / SPEC_LIMIT;
+			gSpec.drawLineXY(x0, value0, x1, value1, COLOR_WQ);
+			x0 = x1;
+			value0 = value1;
+		}
+	}
+	if (EnableSpec) {
+		let x0 = 0;
+		let value0 = spec[0] * HEIGHT_SPEC / SPEC_LIMIT;
+		for (let i = 0; i <= SPEC_WIDTH; i++) {
+			let x1 = i * X_DELTA;
+			let value1 = spec[i] * HEIGHT_SPEC / SPEC_LIMIT;
+			gSpec.drawLineXY(x0, value0, x1, value1);
+			x0 = x1;
+			value0 = value1;
+		}
+	}
+	for (let i = 0; i <= SPEC_WIDTH; i+=PHASE_DIV/4) {
+		let x = i * X_DELTA;
+		gSpec.drawStringC(new vec3(x, 8), "x" + i, 14);
+	}
 }
