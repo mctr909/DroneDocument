@@ -539,3 +539,220 @@ class qtn {
 		a[15] = 1;
 	}
 }
+
+class Rotor {
+	/** @type {number} スカラー成分 */
+	s = 1;
+	/** @type {number} e23の係数 */
+	b23 = 0;
+	/** @type {number} e31の係数 */
+	b31 = 0;
+	/** @type {number} e12の係数 */
+	b12 = 0;
+
+	/**
+	 * ローターを角速度から設定
+	 * @param {Rotor} r 設定対象
+	 * @param {number} omega1 e23の角速度
+	 * @param {number} omega2 e31の角速度
+	 * @param {number} omega3 e12の角速度
+	 * @param {number} scale 角速度のスケール
+	 */
+	static setFromOmega(r, omega1, omega2, omega3, scale=1) {
+		// $$ B = \frac{\omega_1e_{23}+\omega_2e_{31}+\omega_3e_{12}}{||\omega||} $$
+		// $$ R = e^{\frac{||\omega||B scale}{2}} $$
+		let omega_n = Math.hypot(omega1, omega2, omega3);
+		let kb;
+		let ks;
+		if (omega_n < 1e-4) {
+			// $$ \frac{\sin{sw}}{w}\approx s\frac{60-7s^{2}w^{2}}{60+3s^{2}w^{2}} $$
+			const s = scale/2;
+			const sw2 = s*s*omega_n*omega_n;
+			let num = 60 - 7*sw2;
+			let den = 60 + 3*sw2;
+			kb = s*num/den;
+			// $$ \cos{sw}\approx \frac{12-5s^2w^{2}}{12+s^2w^{2}} $$
+			num = 12 - 5*sw2;
+			den = 12 + sw2;
+			ks = num/den;
+		} else {
+			kb = Math.sin(omega_n*scale/2)/omega_n;
+			ks = Math.cos(omega_n*scale/2);
+		}
+		r.s = ks;
+		r.b23 = kb*omega1;
+		r.b31 = kb*omega2;
+		r.b12 = kb*omega3;
+	}
+
+	/**
+	 * ローター積の結果を設定
+	 * @param {Rotor} r 設定対象
+	 * @param {Rotor} a ローターa
+	 * @param {Rotor} b ローターb
+	 */
+	static setMul(r, a, b) {
+		const { s: as, b23: a23, b31: a31, b12: a12 } = a;
+		const { s: bs, b23: b23, b31: b31, b12: b12 } = b;
+		// スカラー成分
+		r.s   = as*bs-a23*b23-a31*b31-a12*b12;
+		// バイベクトル同士のスカラー倍
+		r.b23 = a23*bs + as*b23;
+		r.b31 = a31*bs + as*b31;
+		r.b12 = a12*bs + as*b12;
+		// 交差項
+		// (ab-ba)e23
+		// (a12e12)(b31e31)=(a12b31)(e12e31=e23)
+		// (a31e31)(b12e12)=(a31b12)(e31e12=-e23)
+		r.b23 += a12*b31 - a31*b12;
+		// (ab-ba)e31
+		// (a23e23)(b12e12)=(a23b12)(e23e12=e31)
+		// (a12e12)(b23e23)=(a12b23)(e12e23=-e31)
+		r.b31 += a23*b12 - a12*b23;
+		// (ab-ba)e12
+		// (a31e31)(b23e23)=(a31b23)(e31e23=e12)
+		// (a23e23)(b31e31)=(a23b31)(e23e31=-e12)
+		r.b12 += a31*b23 - a23*b31;
+	}
+
+	/**
+	 * 線形補間
+	 * @param {Rotor} r 設定対象
+	 * @param {Rotor} a ローターa
+	 * @param {Rotor} b ローターb
+	 * @param {number} t 0～1の値(0:ローターa, 1:ローターb)
+	 */
+	static setLerp(r, a, b, t) {
+		let { s: as, b23: a23, b31: a31, b12: a12 } = a;
+		let { s: bs, b23: b23, b31: b31, b12: b12 } = b;
+		let dot = as*bs + a23*b23 + a31*b31 + a12*b12;
+		if (dot < 0) {
+			dot = -dot;
+			bs *= -1;
+			b23 *= -1;
+			b31 *= -1;
+			b12 *= -1;
+		}
+		let h = 1.0 - dot*dot;
+		if (h <= 0.0) {
+			r.s = as;
+			r.b23 = a23;
+			r.b31 = a31;
+			r.b12 = a12;
+		} else {
+			let hs = Math.sqrt(h);
+			if (Math.abs(hs) < 1e-4) {
+				r.s = (as + bs)*0.5;
+				r.b23 = (a23 + b23)*0.5;
+				r.b31 = (a31 + b31)*0.5;
+				r.b12 = (a12 + b12)*0.5;
+			} else {
+				let ph = Math.acos(dot);
+				let pt = ph * t;
+				let ta = Math.sin(ph - pt) / hs;
+				let tb = Math.sin(pt) / hs;
+				r.s = as*ta + bs*tb;
+				r.b23 = a23*ta + b23*tb;
+				r.b31 = a31*ta + b31*tb;
+				r.b12 = a12*ta + b12*tb;
+			}
+		}
+	}
+
+	/**
+	 * ローターを規格化
+	 */
+	normalize() {
+		let k = Math.hypot(this.s, this.b23, this.b31, this.b12);
+		if (k < 1e-9) {
+			this.s = 1;
+			this.b23 = 0;
+			this.b31 = 0;
+			this.b12 = 0;
+		} else {
+			k = 1/k;
+			this.s *= k;
+			this.b23 *= k;
+			this.b31 *= k;
+			this.b12 *= k;
+		}
+	}
+
+	/**
+	 * ローターを縦ベクトル左作用の4x4行列として設定
+	 * @param {Float32Array} m 設定対象
+	 */
+	toMat4(m) {
+		// R = s + b1e23 + b2e31 + b3e12
+		// v = v1e1 + v2e2 + v3e3
+		// Rv = (s + b1e23 + b2e31 + b3e12)(v1e1 + v2e2 + v3e3)
+		//    = sv1e1 + sv2e2 + sv3e3
+		//    + b1v1(e23e1<->e123) + b1v2(e23e2<->-e3)  + b1v3(e23e3<->e2)
+		//    + b2v1(e31e1<->e3)   + b2v2(e31e2<->e123) + b2v3(e31e3<->-e1)
+		//    + b3v1(e12e1<->-e2)  + b3v2(e12e2<->e1)   + b3v3(e12e3<->e123)
+		//    = (sv1  - b2v3 + b3v2)e1
+		//    + (sv2  + b1v3 - b3v1)e2
+		//    + (sv3  - b1v2 + b2v1)e3
+		//    + (b1v1 + b2v2 + b3v3)e123
+		// Rv1 = sv1 - b2v3 + b3v2
+		// Rv2 = sv2 + b1v3 - b3v1
+		// Rv3 = sv3 - b1v2 + b2v1
+		// Rv123 = b1v1 + b2v2 + b3v3
+		// (Rv)(R^-1)=(Rv1e1 + Rv2e2 + Rv3e3 + Rv123e123)(s - b1e23 - b2e31 - b3e12)
+		//    = Rv1se1     - Rv1b1(e1e23<->e123)    - Rv1b2(e1e31<->-e3)     - Rv1b3(e1e12<->e2)
+		//    + Rv2se2     - Rv2b1(e2e23<->e3)      - Rv2b2(e2e31<->e123)    - Rv2b3(e2e12<->-e1)
+		//    + Rv3se3     - Rv3b1(e3e23<->-e2)     - Rv3b2(e3e31<->e1)      - Rv3b3(e3e12<->e123)
+		//    + Rv123se123 - Rv123b1(e123e23<->-e1) - Rv123b2(e123e31<->-e2) - Rv123b3(e123e12<->-e3)
+		//    = (Rv1s   + Rv123b1 - Rv3b2   + Rv2b3  )e1
+		//    + (Rv2s   + Rv3b1   + Rv123b2 - Rv1b3  )e2
+		//    + (Rv3s   - Rv2b1   + Rv1b2   + Rv123b3)e3
+		//    + (Rv123s - Rv1b1   - Rv2b2   - Rv3b3  )e123
+		// (RvR^-1)123
+		//    = (Rv123s - Rv1b1 - Rv2b2 - Rv3b3)e123
+		//    = ((b1v1 + b2v2  + b3v3)s - (sv1  - b2v3   + b3v2)b1 - (sv2  + b1v3   - b3v1)b2 - (sv3  - b1v2   + b2v1)b3)e123
+		//    = (sb1v1 + sb2v2 + sb3v3  - sb1v1 + b1b2v3 - b1b3v2  - sb2v2 - b1b2v3 + b2b3v1  - sb3v3 + b1b3v2 - b2b3v1))e123
+		//    = (sb1v1-sb1v1 + sb2v2-sb2v2 + sb3v3-sb3v3 + b1b2v3-b1b2v3 + b1b3v2-b1b3v2 + b2b3v1-b2b3v1))e123
+		//    = 0
+		// (RvR^-1)1
+		//    = Rv1s + Rv123b1 - Rv3b2 + Rv2b3
+		//    = (sv1  - b2v3  + b3v2 )s + (b1v1   + b2v2   + b3v3  )b1 - (sv3   - b1v2   + b2v1  )b2 + (sv2   + b1v3   - b3v1  )b3
+		//    =  ssv1 - sb2v3 + sb3v2   +  b1b1v1 + b1b2v2 + b1b3v3    -  sb2v3 + b1b2v2 - b2b2v1    +  sb3v2 + b1b3v3 - b3b3v1
+		//    = (ss+b1b1-b2b2-b3b3)v1 + (sb3+b1b2+b1b2+sb3)v2 + (-sb2+b1b3-sb2+b1b3)v3
+		//    = (ss+b1b1-b2b2-b3b3)v1 +         2(b1b2+sb3)v2 +          2(b1b3-sb2)v3
+		// (RvR^-1)2
+		//    = Rv2s + Rv3b1 + Rv123b2 - Rv1b3
+		//    = (sv2  + b1v3  - b3v1 )s + (sv3   - b1v2   + b2v1  )b1 + (b1v1   + b2v2   + b3v3  )b2 - (sv1   - b2v3   + b3v2  )b3
+		//    =  ssv2 + sb1v3 - sb3v1   +  sb1v3 - b1b1v2 + b1b2v1    +  b1b2v1 + b2b2v2 + b2b3v3    -  sb3v1 + b2b3v3 - b3b3v2
+		//    = (-sb3+b1b2+b1b2-sb3)v1 + (ss-b1b1+b2b2-b3b3)v2 + (sb1+sb1+b2b3+b2b3)v3
+		//    =          2(b1b2-sb3)v1 + (ss-b1b1+b2b2-b3b3)v2 +         2(b2b3+sb1)v3
+		// (RvR^-1)3
+		//    = Rv3s - Rv2b1 + Rv1b2 + Rv123b3
+		//    = (sv3  - b1v2  + b2v1 )s - (sv2   + b1v3   - b3v1  )b1 + (sv1   - b2v3   + b3v2  )b2 + (b1v1   + b2v2   + b3v3  )b3
+		//    =  ssv3 - sb1v2 + sb2v1   -  sb1v2 - b1b1v3 + b1b3v1    +  sb2v1 - b2b2v3 + b2b3v2    +  b1b3v1 + b2b3v2 + b3b3v3
+		//    =  ssv3 - sb1v2 + sb2v1   -  sb1v2 - b1b1v3 + b1b3v1    +  sb2v1 - b2b2v3 + b2b3v2    +  b1b3v1 + b2b3v2 + b3b3v3
+		//    = (sb2+b1b3+sb2+b1b3)v1 + (-sb1-sb1+b2b3+b2b3)v2 + (ss-b1b1-b2b2+b3b3)v3
+		//    =         2(b1b3+sb2)v1 +          2(b2b3-sb1)v2 + (ss-b1b1-b2b2+b3b3)v3
+		// RvR^1
+		//    = ((ss+b1b1-b2b2-b3b3)v1 +         2(b1b2+sb3)v2 +         2(b1b3-sb2)v3)e1
+		//    + (        2(b1b2-sb3)v1 + (ss-b1b1+b2b2-b3b3)v2 +         2(b2b3+sb1)v3)e2
+		//	  + (        2(b1b3+sb2)v1 +         2(b2b3-sb1)v2 + (ss-b1b1-b2b2+b3b3)v3)e3
+		const { s: s, b23: b23, b31: b31, b12: b12 } = this;
+		// 反対称成分
+		let sb1 = 2*s*b23;
+		let sb2 = 2*s*b31;
+		let sb3 = 2*s*b12;
+		// 非対角の対称成分
+		let b1b2 = 2*b23*b31;
+		let b1b3 = 2*b23*b12;
+		let b2b3 = 2*b31*b12;
+		// 対角成分
+		let ss = s*s;
+		let b1b1 = b23*b23;
+		let b2b2 = b31*b31;
+		let b3b3 = b12*b12;
+		m[ 0]=(ss+b1b1-b2b2-b3b3), m[ 1]=         (b1b2+sb3), m[ 2]=         (b1b3-sb2), m[ 3]=0,
+		m[ 4]=         (b1b2-sb3), m[ 5]=(ss-b1b1+b2b2-b3b3), m[ 6]=         (b2b3+sb1), m[ 7]=0,
+		m[ 8]=         (b1b3+sb2), m[ 9]=         (b2b3-sb1), m[10]=(ss-b1b1-b2b2+b3b3), m[11]=0,
+		m[12]=                  0,                   m[13]=0,                   m[14]=0, m[15]=1;
+	}
+}

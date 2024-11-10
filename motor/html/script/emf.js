@@ -2,6 +2,7 @@
 /// <reference path="drawer.js" />
 const ROTOR_DIAMETER = 100;
 const STATOR_DIAMETER = 240;
+const STATOR_THICK = 20;
 const ROTOR_DIV = 48;
 const SLOT_DIV = 96;
 const WAVE_SCOPE_WIDTH = 320;
@@ -121,8 +122,8 @@ class Slot {
 			this.pos.push(new vec3(radius*Math.cos(th), radius*Math.sin(th)));
 		}
 		// 磁場・電場
-		const MAGNETIC_R = radius + 7;
-		const BEMF_R = radius + 13;
+		const MAGNETIC_R = radius + STATOR_THICK*0.5;
+		const BEMF_R = radius + STATOR_THICK;
 		let mf = [];
 		let ef = [];
 		this.mp = [];
@@ -163,7 +164,6 @@ class Motor {
 	#scopeU = new vec3();
 	#scopeV = new vec3();
 	#scopeW = new vec3();
-	#scopeA = new vec3();
 
 	/**
 	 * 固定子を作成
@@ -228,12 +228,12 @@ class Motor {
 				let e = (ef[ixF] + ef[ixF+1]) * SCALE_E;
 				ep[ixP].add(this.Pos, posA);
 				ep[ixP+1].add(this.Pos, posB);
-				drawer.drawLine(posA, posB, Drawer.ToHue(e), 20);
+				drawer.drawLine(posA, posB, Drawer.ToHue(e), STATOR_THICK*2);
 				// 磁場
 				let m = (mf[ixF] + mf[ixF+1]) * SCALE_M;
 				mp[ixP].add(this.Pos, posA);
 				mp[ixP+1].add(this.Pos, posB);
-				drawer.drawLine(posA, posB, Drawer.ToHue(m), 10);
+				drawer.drawLine(posA, posB, Drawer.ToHue(m), STATOR_THICK);
 			}
 			// ラベル
 			let name;
@@ -247,7 +247,7 @@ class Motor {
 				name = "W", color = Color.RED; break;
 			}
 			let middle = slot.pos[slot.pos.length >> 1];
-			middle.normalizeScale(middle.abs + 36, posA);
+			middle.normalizeScale(middle.abs + STATOR_THICK*2+12, posA);
 			posA.add(this.Pos, posA);
 			drawer.fillCircle(posA, 12, color);
 			drawer.drawStringC(posA, name, 16, Color.WHITE);
@@ -285,15 +285,15 @@ class Motor {
 		if (1 < ew) ew = 1;
 		if (ew < -1) ew = -1;
 
+		const NEUTRAL = drawer.Height/2;
+
 		// 波形をクリア
 		if (drawer.Width <= this.#scopeX) {
-			const NEUTRAL = drawer.Height/2;
 			drawer.clear();
 			drawer.drawLine(new vec3(0, NEUTRAL), new vec3(drawer.Width, NEUTRAL), Motor.#COLOR_AXIZ, 1);
 			this.#scopeU = new vec3(0, NEUTRAL);
 			this.#scopeV = new vec3(0, NEUTRAL);
 			this.#scopeW = new vec3(0, NEUTRAL);
-			this.#scopeA = new vec3(0, NEUTRAL);
 			this.#scopeX = 0;
 		}
 
@@ -301,22 +301,18 @@ class Motor {
 		let yu = drawer.Height * (0.5-0.5*eu);
 		let yv = drawer.Height * (0.5-0.5*ev);
 		let yw = drawer.Height * (0.5-0.5*ew);
-		let ya = drawer.Height * (0.5-0.49*Math.cos(this.#theta*this.#rotor.poles/2));
 		let pu = new vec3(this.#scopeX, yu);
 		let pv = new vec3(this.#scopeX, yv);
 		let pw = new vec3(this.#scopeX, yw);
-		let pa = new vec3(this.#scopeX, ya);
 		drawer.drawLine(this.#scopeU, pu, Motor.#COLOR_U, 1);
 		if (!this.OnlyU) {
 			drawer.drawLine(this.#scopeV, pv, Motor.#COLOR_V, 1);
 			drawer.drawLine(this.#scopeW, pw, Motor.#COLOR_W, 1);
 		}
-		drawer.drawLine(this.#scopeA, pa, Color.BLACK, 1);
 		this.#scopeU = pu;
 		this.#scopeV = pv;
 		this.#scopeW = pw;
-		this.#scopeA = pa;
-		this.#scopeX += 2;
+		this.#scopeX += 1;
 	}
 
 	/**
@@ -352,7 +348,7 @@ class Motor {
 	 */
 	calcEMF() {
 		const R_UNIT = this.#rotor.radius;
-		const R_MIN = 5.0 / R_UNIT;
+		const R_MIN = 1.0 / R_UNIT;
 		for (let ixS=0; ixS<this.#slots.length; ixS++) {
 			let slot = this.#slots[ixS];
 			for (let ixP=0; ixP<slot.pos.length; ixP++) {
@@ -368,7 +364,7 @@ class Motor {
 						r = R_MIN;
 					}
 					let dot = dipole.mv.X * rx + dipole.mv.Y * ry + dipole.mv.Z * rz;
-					mf += dot / r / r / r;
+					mf += 5*dot / r / r;
 				}
 				mf /= this.#rotor.dipoles.length;
 				slot.ef[ixP] = -(mf - slot.mf[ixP]);

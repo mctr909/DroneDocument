@@ -2,15 +2,14 @@
 //#define __PHASE24_H__
 
 /******************************************************************************/
-const NEUTRAL = 103;
-
-/******************************************************************************/
 let u_del, u_adv;
 let v_del, v_adv;
 let w_del, w_adv;
 
 /******************************************************************************/
 function phase24_detect(sense_u, sense_v) {
+	const NEUTRAL = 103;
+
 	/* u相,v相,w相の各相に対して±1/48周期ずれた相を作る
 	 * del: 1/48周期遅れた相
 	 * adv: 1/48周期進んだ相 */
@@ -64,99 +63,55 @@ function phase24_detect(sense_u, sense_v) {
 	}
 
 	/* 1/24周期単位の位相を得る */
-	let detected_phase;
-	if (NEUTRAL < u_del) {
-		if (u_adv <= NEUTRAL) {
-			detected_phase = 12;
-		}
-		if (u_adv < v_adv) {
-			detected_phase = 1;
-		}
-	} else {
-		if (NEUTRAL < u_adv) {
-			detected_phase = 0;
-		}
-		if (v_adv <= u_adv) {
-			detected_phase = 13;
-		}
-	}
-	if (NEUTRAL < v_del) {
-		if (v_adv <= NEUTRAL) {
-			detected_phase = 4;
-		}
-		if (v_adv < w_adv) {
-			detected_phase = 17;
-		}
-	} else {
-		if (NEUTRAL < v_adv) {
-			detected_phase = 16;
-		}
-		if (w_adv <= v_adv) {
-			detected_phase = 5;
-		}
-	}
-	if (NEUTRAL < w_del) {
-		if (w_adv <= NEUTRAL) {
-			detected_phase = 20;
-		}
-		if (w_adv < u_adv) {
-			detected_phase = 9;
-		}
-	} else {
-		if (NEUTRAL < w_adv) {
-			detected_phase = 8;
-		}
-		if (u_adv <= w_adv) {
-			detected_phase = 21;
-		}
-	}
-	if (u_del < w_del) {
-		if (NEUTRAL < u_adv) {
-			detected_phase = 11;
-		}
-		if (w_adv < u_adv) {
-			detected_phase = 22;
-		}
-	} else {
-		if (u_adv <= NEUTRAL) {
-			detected_phase = 23;
-		}
-		if (u_adv <= w_adv) {
-			detected_phase = 10;
-		}
-	}
-	if (v_del < u_del) {
-		if (NEUTRAL < v_adv) {
-			detected_phase = 3;
-		}
-		if (u_adv < v_adv) {
-			detected_phase = 14;
-		}
-	} else {
-		if (v_adv <= NEUTRAL) {
-			detected_phase = 15;
-		}
-		if (v_adv <= u_adv) {
-			detected_phase = 2;
-		}
-	}
-	if (w_del < v_del) {
-		if (NEUTRAL < w_adv) {
-			detected_phase = 19;
-		}
-		if (v_adv < w_adv) {
-			detected_phase = 6;
-		}
-	} else {
-		if (w_adv <= NEUTRAL) {
-			detected_phase = 7;
-		}
-		if (w_adv <= v_adv) {
-			detected_phase = 18;
-		}
-	}
+	let phase = 0;
+	{
+		let uw = 0x80 - (u_adv > w_adv);
+		let vu = 0x80 - (v_adv > u_adv);
+		let wv = 0x80 - (w_adv > v_adv);
+		let un = 0x80 - (u_adv > NEUTRAL);
+		let vn = 0x80 - (v_adv > NEUTRAL);
+		let wn = 0x80 - (w_adv > NEUTRAL);
+		let dd, nn;
 
-	return detected_phase;
+		dd = 0x80 - (NEUTRAL < u_del);
+		nn = ~un;
+		phase |= dd&vu&1;
+		phase |= dd&nn&12;
+		phase |= ~(dd|vu)&13;
+
+		dd = 0x80 - (NEUTRAL < v_del);
+		nn = ~vn;
+		phase |= dd&nn&4;
+		phase |= dd&wv&17;
+		phase |= ~(dd|wv)&5;
+		phase |= ~(dd|nn)&16;
+
+		dd = 0x80 - (NEUTRAL < w_del);
+		nn = ~wn;
+		phase |= dd&uw&9;
+		phase |= dd&nn&20;
+		phase |= ~(dd|nn)&8;
+		phase |= ~(dd|uw)&21;
+
+		dd = 0x80 - (u_del < w_del);
+		phase |= dd&un&11;
+		phase |= dd&uw&22;
+		phase |= ~(dd|uw)&10;
+		phase |= ~(dd|un)&23;
+
+		dd = 0x80 - (v_del < u_del);
+		phase |= dd&vn&3;
+		phase |= dd&vu&14;
+		phase |= ~(dd|vu)&2;
+		phase |= ~(dd|vn)&15;
+
+		dd = 0x80 - (w_del < v_del);
+		phase |= dd&wv&6;
+		phase |= dd&wn&19;
+		phase |= ~(dd|wn)&7;
+		phase |= ~(dd|wv)&18;
+	}
+	return phase;
 }
 
 //#endif /* __PHASE24_H__ */

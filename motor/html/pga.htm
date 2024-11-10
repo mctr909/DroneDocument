@@ -1,0 +1,19 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//JP">
+<html lang="ja">
+<meta charset="utf-8">
+<html>
+	<head>
+		<script type="text/javascript" src="script/cl.js"></script>
+	</head>
+	<body>
+		<span id="disp"></span>
+	</body>
+	<script type="text/javascript">
+		let c = new Cl(1, 1, 1);
+		let v = [new ClV("v0", 0), new ClV("v1", 1), new ClV("v2", 2)];
+		c.createMotor(v,
+			 new ClM("rs", new ClB("r1", 1, 2), new ClB("r2", 2, 0), new ClB("r3", 0, 1))
+			//,new ClM("ts", new ClB("t1", 0, 1), new ClB("t2", 0, 2), new ClB("t3", 0, 3))
+		);
+	</script>
+</html>
